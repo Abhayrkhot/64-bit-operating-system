@@ -1,11 +1,18 @@
+#include "arch/x86_64/acpi.hpp"
+#include "arch/x86_64/apic.hpp"
 #include "arch/x86_64/cpu.hpp"
+#include "arch/x86_64/fpu.hpp"
 #include "arch/x86_64/gdt.hpp"
 #include "arch/x86_64/interrupts.hpp"
+#include "arch/x86_64/percpu.hpp"
 #include "common/mem.hpp"
 #include "core/boot.hpp"
 #include "core/cmdline.hpp"
 #include "core/log.hpp"
 #include "core/power.hpp"
+#include "core/time.hpp"
+#include "bench/bench.hpp"
+#include "sched/sched.hpp"
 #include "drivers/fw_cfg.hpp"
 #include "drivers/serial.hpp"
 #include "mm/kheap.hpp"
@@ -56,15 +63,24 @@ extern "C" [[noreturn]] void kmain(const shale::BootInfo* loader_info) {
   print_memory_map();
 
   gdt::init();
+  percpu::init();
   interrupts::init();
+  fpu::init();
   pmm::init();
   vmm::init();
   pmm::reclaim_boot_memory();
   kheap_init();
-  kprintf("boot to ready: %lu kcycles since kernel entry\n", (arch::rdtsc() - tsc_kernel_entry) / 1000);
+  acpi::init(bi.rsdp_phys);
+  apic::init();
+  time::calibrate();
+  sched::init();
+  sched::start();
+  kprintf("boot to ready: %lu us since kernel entry\n",
+          time::cycles_to_ns(arch::rdtsc() - tsc_kernel_entry) / 1000);
 
   char filter[64];
   if (cmdline::get("test", filter, sizeof(filter))) ktest::run(filter[0] ? filter : "all");
+  if (cmdline::get("bench", filter, sizeof(filter))) bench::run(filter[0] ? filter : "all");
 
   kprintf("nothing to run; halting\n");
   power::qemu_exit(power::ExitCode::kSuccess);

@@ -558,11 +558,11 @@ int main(int argc, char** argv) {
     std::fprintf(f, "level,allocator,seed,util,free_in_64k,free_in_2m,frag_failures,frag_failures_2m,"
                     "steady_overhead,peak_footprint,peak_live,shrink_overhead,shrink_footprint,shrink_live\n");
     for (const PageResult& r : pages)
-      std::fprintf(f, "page,%s,%lu,%.4f,%.4f,%.4f,%lu,%lu,,,,,,\n", r.name.c_str(), static_cast<unsigned long>(seed),
+      std::fprintf(f, "page,\"%s\",%lu,%.4f,%.4f,%.4f,%lu,%lu,,,,,,\n", r.name.c_str(), static_cast<unsigned long>(seed),
                    r.util, r.aligned64k, r.aligned2m, static_cast<unsigned long>(r.frag_failures),
                    static_cast<unsigned long>(r.frag_failures_2m));
     for (const HeapResult& r : heaps)
-      std::fprintf(f, "heap,%s,%lu,,,,,,%.4f,%lu,%lu,%.4f,%lu,%lu\n", r.name.c_str(),
+      std::fprintf(f, "heap,\"%s\",%lu,,,,,,%.4f,%lu,%lu,%.4f,%lu,%lu\n", r.name.c_str(),
                    static_cast<unsigned long>(seed), r.steady_overhead, static_cast<unsigned long>(r.peak_footprint),
                    static_cast<unsigned long>(r.peak_live), r.shrink_overhead,
                    static_cast<unsigned long>(r.shrink_footprint), static_cast<unsigned long>(r.shrink_live));

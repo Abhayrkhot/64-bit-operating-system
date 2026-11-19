@@ -29,6 +29,11 @@ SECTIONS {
     KEEP(*(.ktests))
     __ktests_end = .;
   } :rodata
+  .kbenches : ALIGN(8) {
+    __kbenches_start = .;
+    KEEP(*(.kbenches))
+    __kbenches_end = .;
+  } :rodata
   .extable : ALIGN(8) {
     __extable_start = .;
     KEEP(*(.extable))

@@ -4,6 +4,7 @@
 #include "arch/x86_64/extable.hpp"
 #include "arch/x86_64/gdt.hpp"
 #include "core/log.hpp"
+#include "sched/sched.hpp"
 
 extern "C" uint8_t isr_stub_table[];
 
@@ -109,4 +110,7 @@ extern "C" void interrupt_dispatch(interrupts::Frame* f) {
     kprintf("unexpected interrupt vector %lu\n", f->vector);
   }
   g_depth--;
+  // Preempt only from the outermost interrupt, and only if the interrupted
+  // context could have been interrupted anyway (IF was set).
+  if (g_depth == 0 && (f->rflags & (1u << 9))) sched::preempt_if_needed();
 }
