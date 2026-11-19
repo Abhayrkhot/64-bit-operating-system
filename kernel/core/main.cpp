@@ -1,4 +1,6 @@
 #include "arch/x86_64/cpu.hpp"
+#include "arch/x86_64/gdt.hpp"
+#include "arch/x86_64/interrupts.hpp"
 #include "common/mem.hpp"
 #include "core/boot.hpp"
 #include "core/cmdline.hpp"
@@ -6,6 +8,9 @@
 #include "core/power.hpp"
 #include "drivers/fw_cfg.hpp"
 #include "drivers/serial.hpp"
+#include "mm/kheap.hpp"
+#include "mm/pmm.hpp"
+#include "mm/vmm.hpp"
 #include "test/ktest.hpp"
 
 extern "C" void (*__init_array_start[])(), (*__init_array_end[])();
@@ -49,6 +54,14 @@ extern "C" [[noreturn]] void kmain(const shale::BootInfo* loader_info) {
     cmdline::init(bi.cmdline);
   kprintf("cmdline: \"%s\"\n", cmdline::raw());
   print_memory_map();
+
+  gdt::init();
+  interrupts::init();
+  pmm::init();
+  vmm::init();
+  pmm::reclaim_boot_memory();
+  kheap_init();
+  kprintf("boot to ready: %lu kcycles since kernel entry\n", (arch::rdtsc() - tsc_kernel_entry) / 1000);
 
   char filter[64];
   if (cmdline::get("test", filter, sizeof(filter))) ktest::run(filter[0] ? filter : "all");
