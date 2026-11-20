@@ -3,6 +3,7 @@
 #include "arch/x86_64/cpu.hpp"
 #include "common/mem.hpp"
 #include "core/boot.hpp"
+#include "core/cmdline.hpp"
 #include "core/log.hpp"
 #include "mm/kheap.hpp"
 #include "mm/pmm.hpp"
@@ -173,6 +174,11 @@ void init() {
   g_features.smep = leaf7.ebx & (1u << 7);
   g_features.smap = leaf7.ebx & (1u << 20);
   g_features.umip = leaf7.ecx & (1u << 2);
+  // Diagnostics: `nopge`, `nosmap`, `nosmep`, `noumip` turn features off.
+  if (cmdline::has("nopge")) g_features.pge = false;
+  if (cmdline::has("nosmap")) g_features.smap = false;
+  if (cmdline::has("nosmep")) g_features.smep = false;
+  if (cmdline::has("noumip")) g_features.umip = false;
   uint64_t nx = g_features.nx ? kNoExecute : 0;
   uint64_t global = g_features.pge ? kGlobal : 0;
 

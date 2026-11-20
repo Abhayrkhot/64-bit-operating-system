@@ -92,6 +92,8 @@ Thread* spawn(const char* name, void (*entry)(void*), void* arg);
 // Creates a thread without making it runnable (the process layer finishes setup).
 Thread* create(const char* name, void (*entry)(void*), void* arg);
 void make_runnable(Thread* t);
+// Frees a thread from create() that was never made runnable.
+void discard(Thread* t);
 [[noreturn]] void exit(int code);
 // Waits for `t` to exit and frees it. Returns its exit code.
 int join(Thread* t);

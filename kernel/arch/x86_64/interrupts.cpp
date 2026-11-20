@@ -30,6 +30,7 @@ struct [[gnu::packed]] Pointer {
 alignas(16) Gate g_idt[256];
 Handler g_handlers[256];
 void (*g_user_fault_hook)(Frame*, const char*);
+void (*g_return_to_user_hook)(Frame*);
 uint32_t g_depth;
 
 void set_gate(uint8_t vector, uint8_t ist, uint8_t dpl) {
@@ -87,6 +88,7 @@ void init() {
 
 void set_handler(uint8_t vector, Handler h) { g_handlers[vector] = h; }
 void set_user_fault_hook(void (*hook)(Frame*, const char*)) { g_user_fault_hook = hook; }
+void set_return_to_user_hook(void (*hook)(Frame*)) { g_return_to_user_hook = hook; }
 uint32_t depth() { return g_depth; }
 
 }  // namespace interrupts
@@ -102,6 +104,7 @@ extern "C" void interrupt_dispatch(interrupts::Frame* f) {
     if (!f->from_user() && extable::fixup(f)) {
       // resumed
     } else if (f->from_user() && g_user_fault_hook) {
+      g_depth--;  // the hook kills the process and never returns here
       g_user_fault_hook(f, exception_name(f->vector));
     } else {
       fatal(f);
@@ -113,4 +116,5 @@ extern "C" void interrupt_dispatch(interrupts::Frame* f) {
   // Preempt only from the outermost interrupt, and only if the interrupted
   // context could have been interrupted anyway (IF was set).
   if (g_depth == 0 && (f->rflags & (1u << 9))) sched::preempt_if_needed();
+  if (f->from_user() && g_return_to_user_hook) g_return_to_user_hook(f);
 }

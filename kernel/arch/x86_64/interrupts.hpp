@@ -26,6 +26,8 @@ void set_handler(uint8_t vector, Handler h);
 // Called for faults the kernel can't resolve; ring-3 faults go to this hook
 // (set by the process layer) instead of panicking.
 void set_user_fault_hook(void (*hook)(Frame*, const char* what));
+// Runs before every interrupt return to ring 3 (pending kills).
+void set_return_to_user_hook(void (*hook)(Frame*));
 void dump_frame(const Frame* f);
 const char* exception_name(uint64_t vector);
 

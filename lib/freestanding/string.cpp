@@ -1,4 +1,5 @@
-// libc memory/string routines for the kernel. The compiler emits calls to
+// libc memory/string routines for the kernel and user programs (not host
+// builds, which use the real libc). The compiler emits calls to
 // memcpy/memset for struct copies, so these must exist and must not recurse.
 #include "common/mem.hpp"
 

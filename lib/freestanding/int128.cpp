@@ -1,13 +1,13 @@
 // 128-bit division helpers the compiler calls for unsigned __int128 '/' and
-// '%' (normally from compiler-rt, which the freestanding kernel doesn't link).
-// Plain shift-and-subtract: only used off hot paths (time math, reporting).
-#include "core/log.hpp"
+// '%' (normally from compiler-rt, which the kernel and user programs don't
+// link). Plain shift-and-subtract: only used off hot paths (time math,
+// benchmark reporting).
 
 namespace {
 using u128 = unsigned __int128;
 
 u128 divmod(u128 n, u128 d, u128* rem) {
-  if (d == 0) panic("128-bit division by zero");
+  if (d == 0) __builtin_trap();
   if (d > n) {
     *rem = n;
     return 0;

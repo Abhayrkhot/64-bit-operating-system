@@ -203,6 +203,20 @@ void make_runnable(Thread* t) {
   arch::irq_restore(irq);
 }
 
+void discard(Thread* t) {
+  KASSERT(t->state == ThreadState::kBlocked && t->switches_in == 0);
+  bool irq = arch::irq_save();
+  for (Thread** p = &g_all; *p; p = &(*p)->all_next) {
+    if (*p == t) {
+      *p = t->all_next;
+      break;
+    }
+  }
+  arch::irq_restore(irq);
+  vmm::free_kernel_stack(t->kstack_top, kKernelStackPages);
+  kfree(t);
+}
+
 Thread* spawn(const char* name, void (*entry)(void*), void* arg) {
   Thread* t = create(name, entry, arg);
   if (t) make_runnable(t);

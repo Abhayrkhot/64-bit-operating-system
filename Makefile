@@ -34,9 +34,10 @@ KERNEL_CXXFLAGS := --target=x86_64-unknown-none-elf -std=c++17 $(FREESTANDING) -
   -Iinclude -Ikernel -Ilib -DSHALE_KERNEL=1
 KERNEL_ASFLAGS := --target=x86_64-unknown-none-elf -Iinclude -Ikernel -g
 # Portable libraries compiled into the kernel (also built for host tests).
-SHARED_LIB_DIRS := lib/fmt lib/mm lib/fs lib/util
+SHARED_LIB_DIRS := lib/fmt lib/mm lib/fs lib/util lib/elf
 SHARED_SRCS := $(wildcard $(addsuffix /*.cpp,$(SHARED_LIB_DIRS)))
-KERNEL_SRCS := $(shell find kernel -name '*.cpp' -o -name '*.S' | sort) $(SHARED_SRCS)
+FREESTANDING_SRCS := $(wildcard lib/freestanding/*.cpp)
+KERNEL_SRCS := $(shell find kernel -name '*.cpp' -o -name '*.S' | sort) $(SHARED_SRCS) $(FREESTANDING_SRCS)
 KERNEL_OBJS := $(patsubst %,$(BUILD)/k/%.o,$(KERNEL_SRCS))
 
 $(BUILD)/k/%.cpp.o: %.cpp
@@ -56,7 +57,7 @@ $(BUILD)/kernel.stripped: $(BUILD)/kernel.elf
 # --- User programs ----------------------------------------------------------
 USER_CXXFLAGS := --target=x86_64-unknown-none-elf -std=c++17 $(FREESTANDING) -fno-pic -fno-pie \
   -fno-omit-frame-pointer -O2 -g $(WARN) -Iinclude -Iuser/libc -Ilib -DSHALE_USER=1
-USER_LIBC_SRCS := $(wildcard user/libc/*.cpp user/libc/*.S) lib/fmt/format.cpp
+USER_LIBC_SRCS := $(wildcard user/libc/*.cpp user/libc/*.S) lib/fmt/format.cpp $(FREESTANDING_SRCS)
 USER_LIBC_OBJS := $(patsubst %,$(BUILD)/u/%.o,$(USER_LIBC_SRCS))
 USER_PROGS := $(notdir $(basename $(wildcard user/bin/*.cpp)))
 USER_ELFS := $(patsubst %,$(BUILD)/initrd/bin/%,$(USER_PROGS))
@@ -125,6 +126,21 @@ test: htest ktest
 
 run: image
 	$(QEMU_RUN) --interactive --data-disk
+
+# libFuzzer + ASan/UBSan over the ELF validator, seeded with the real programs.
+FUZZ_SECONDS ?= 60
+FUZZ_FLAGS := -std=c++17 -O1 -g -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined \
+  -Iinclude -Ilib -DSHALE_HOSTED=1
+$(BUILD)/fuzz/elf_fuzz: host/fuzz/elf_fuzz.cpp lib/elf/validate.cpp lib/elf/validate.hpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(FUZZ_FLAGS) -o $@ host/fuzz/elf_fuzz.cpp lib/elf/validate.cpp
+
+.PHONY: fuzz-elf
+fuzz-elf: $(BUILD)/fuzz/elf_fuzz $(USER_ELFS)
+	mkdir -p $(BUILD)/fuzz/elf_corpus
+	cp $(USER_ELFS) $(BUILD)/fuzz/elf_corpus/
+	$(BUILD)/fuzz/elf_fuzz -max_total_time=$(FUZZ_SECONDS) -max_len=65536 -print_final_stats=1 \
+	  $(BUILD)/fuzz/elf_corpus
 
 clean:
 	rm -rf $(BUILD)

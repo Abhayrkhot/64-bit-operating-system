@@ -14,7 +14,11 @@
 #include "bench/bench.hpp"
 #include "sched/sched.hpp"
 #include "drivers/fw_cfg.hpp"
+#include "drivers/console.hpp"
 #include "drivers/serial.hpp"
+#include "fs/initrd.hpp"
+#include "proc/process.hpp"
+#include "proc/syscall.hpp"
 #include "mm/kheap.hpp"
 #include "mm/pmm.hpp"
 #include "mm/vmm.hpp"
@@ -75,6 +79,10 @@ extern "C" [[noreturn]] void kmain(const shale::BootInfo* loader_info) {
   time::calibrate();
   sched::init();
   sched::start();
+  initrd::init(bi.initrd_phys, bi.initrd_size);
+  console::init();
+  syscall::init();
+  process::init();
   kprintf("boot to ready: %lu us since kernel entry\n",
           time::cycles_to_ns(arch::rdtsc() - tsc_kernel_entry) / 1000);
 
