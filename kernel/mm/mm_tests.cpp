@@ -184,7 +184,11 @@ KTEST(heap_random_stress_and_return_to_baseline) {
   constexpr int kSlots = 2048;
   static uint8_t* ptrs[kSlots];
   static uint32_t sizes[kSlots];
-  uint64_t free_before = pmm::free_bytes();
+  // Other subsystems (the mounted file system, processes) legitimately hold
+  // heap objects, so compare against a snapshot rather than zero.
+  uint64_t live_before[shale::mm::Heap::kNumClasses];
+  for (unsigned c = 0; c < shale::mm::Heap::kNumClasses; c++) live_before[c] = kheap_class_stats(c).live_objects;
+  uint64_t large_before = kheap_stats().large_frames;
   for (int step = 0; step < 200000; step++) {
     int i = static_cast<int>(rng.below(kSlots));
     if (ptrs[i]) {
@@ -206,14 +210,9 @@ KTEST(heap_random_stress_and_return_to_baseline) {
     ptrs[i] = nullptr;
   }
   KEXPECT(kheap_check());
-  // Only the per-class cached empty slabs (at most one each) may remain.
-  uint64_t cached = 0;
-  for (unsigned c = 0; c < shale::mm::Heap::kNumClasses; c++) {
-    auto cs = kheap_class_stats(c);
-    KEXPECT_EQ(cs.live_objects, 0u);
-    cached += cs.slabs * cs.slab_frames * 4096;
-  }
-  KEXPECT(pmm::free_bytes() + cached >= free_before);
+  for (unsigned c = 0; c < shale::mm::Heap::kNumClasses; c++)
+    KEXPECT_EQ(kheap_class_stats(c).live_objects, live_before[c]);
+  KEXPECT_EQ(kheap_stats().large_frames, large_before);
 }
 
 KTEST(heap_typed_cache) {

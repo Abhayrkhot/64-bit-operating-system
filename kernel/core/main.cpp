@@ -15,6 +15,9 @@
 #include "sched/sched.hpp"
 #include "drivers/fw_cfg.hpp"
 #include "drivers/console.hpp"
+#include "drivers/pci.hpp"
+#include "fs/fsck.hpp"
+#include "fs/vfs.hpp"
 #include "drivers/serial.hpp"
 #include "fs/initrd.hpp"
 #include "proc/process.hpp"
@@ -30,6 +33,52 @@ namespace {
 
 void run_constructors() {
   for (auto* fn = __init_array_start; fn < __init_array_end; fn++) (*fn)();
+}
+
+// `run=/bin/prog args=a:b:c`: run one program and report how it ended.
+[[noreturn]] void run_program(const char* path) {
+  static char args[256];
+  static const char* argv[shale::sys::kMaxArgs + 1];
+  int argc = 0;
+  const char* base = path;
+  for (const char* c = path; *c; c++)
+    if (*c == '/') base = c + 1;
+  argv[argc++] = base;
+  if (cmdline::get("args", args, sizeof(args)) && args[0]) {
+    char* p = args;
+    while (*p && argc < static_cast<int>(shale::sys::kMaxArgs)) {
+      argv[argc++] = p;
+      while (*p && *p != ':') p++;
+      if (*p) *p++ = 0;
+    }
+  }
+  argv[argc] = nullptr;
+  int pid = process::spawn(path, argv, process::kernel());
+  if (pid < 0) {
+    kprintf("RUN %s failed to start (%d)\n", path, pid);
+    power::shutdown(power::ExitCode::kFailure);
+  }
+  int status = -1;
+  process::wait(process::kernel(), pid, &status);
+  kprintf("RUN %s exit=%d\n", path, status);
+  power::shutdown(status == 0 ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
+}
+
+// `fsck`: mount (which replays the journal), unmount, check the disk.
+[[noreturn]] void fsck_disk() {
+  if (!vfs::root_mounted()) {
+    kprintf("FSCK no file system\n");
+    power::qemu_exit(power::ExitCode::kFailure);
+  }
+  uint64_t replayed = vfs::fs()->stats().replayed_txns;
+  vfs::shutdown();
+  shale::fs::FsckReport rep;
+  int r = shale::fs::fsck(vfs::disk(), &rep);
+  kprintf("FSCK errors=%u files=%u dirs=%u used_blocks=%lu replayed_txns=%lu\n", rep.errors, rep.files, rep.dirs,
+          rep.used_blocks, replayed);
+  for (uint32_t i = 0; i < rep.errors && i < shale::fs::FsckReport::kMaxMessages; i++)
+    kprintf("FSCK   %s\n", rep.messages[i]);
+  power::qemu_exit(r == 0 && rep.errors == 0 ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
 }
 
 void print_memory_map() {
@@ -83,16 +132,26 @@ extern "C" [[noreturn]] void kmain(const shale::BootInfo* loader_info) {
   console::init();
   syscall::init();
   process::init();
+  pci::enumerate();
+  vfs::init();
   kprintf("boot to ready: %lu us since kernel entry\n",
           time::cycles_to_ns(arch::rdtsc() - tsc_kernel_entry) / 1000);
 
   char filter[64];
   if (cmdline::get("test", filter, sizeof(filter))) ktest::run(filter[0] ? filter : "all");
   if (cmdline::get("bench", filter, sizeof(filter))) bench::run(filter[0] ? filter : "all");
-
-  kprintf("nothing to run; halting\n");
-  power::qemu_exit(power::ExitCode::kSuccess);
+  if (cmdline::has("fsck")) fsck_disk();
+  char path[128];
+  if (cmdline::get("run", path, sizeof(path)) && path[0]) run_program(path);
+  run_program("/bin/sh");
 }
+
+namespace power {
+void shutdown(ExitCode code) {
+  vfs::shutdown();
+  qemu_exit(code);
+}
+}  // namespace power
 
 // ---- boot-level tests ------------------------------------------------------
 

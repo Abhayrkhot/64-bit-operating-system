@@ -18,4 +18,7 @@ enum class ExitCode : uint32_t {
   arch::halt_forever();
 }
 
+// Orderly exit: unmounts the file system first (core/main.cpp).
+[[noreturn]] void shutdown(ExitCode code);
+
 }  // namespace power

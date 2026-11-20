@@ -59,7 +59,7 @@ void run(const char* filter) {
     ran++;
   }
   kprintf("BENCH done ran=%d\n", ran);
-  power::qemu_exit(ran ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
+  power::shutdown(ran ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
 }
 
 }  // namespace bench

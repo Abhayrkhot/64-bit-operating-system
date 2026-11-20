@@ -41,7 +41,7 @@ void run(const char* filter) {
   }
   g_current = nullptr;
   kprintf("KTEST SUMMARY passed=%d failed=%d\n", passed, failed);
-  power::qemu_exit(failed == 0 && passed > 0 ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
+  power::shutdown(failed == 0 && passed > 0 ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
 }
 
 }  // namespace ktest

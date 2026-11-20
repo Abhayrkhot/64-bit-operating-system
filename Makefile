@@ -57,7 +57,7 @@ $(BUILD)/kernel.stripped: $(BUILD)/kernel.elf
 # --- User programs ----------------------------------------------------------
 USER_CXXFLAGS := --target=x86_64-unknown-none-elf -std=c++17 $(FREESTANDING) -fno-pic -fno-pie \
   -fno-omit-frame-pointer -O2 -g $(WARN) -Iinclude -Iuser/libc -Ilib -DSHALE_USER=1
-USER_LIBC_SRCS := $(wildcard user/libc/*.cpp user/libc/*.S) lib/fmt/format.cpp $(FREESTANDING_SRCS)
+USER_LIBC_SRCS := $(wildcard user/libc/*.cpp user/libc/*.S) lib/fmt/format.cpp lib/util/crc32c.cpp $(FREESTANDING_SRCS)
 USER_LIBC_OBJS := $(patsubst %,$(BUILD)/u/%.o,$(USER_LIBC_SRCS))
 USER_PROGS := $(notdir $(basename $(wildcard user/bin/*.cpp)))
 USER_ELFS := $(patsubst %,$(BUILD)/initrd/bin/%,$(USER_PROGS))
