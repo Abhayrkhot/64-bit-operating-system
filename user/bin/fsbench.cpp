@@ -104,7 +104,7 @@ int main(int, char**) {
   }
   uint64_t uns = clock_ns() - t0;
   sync();
-  printf("BENCH fs create_ops_per_s=%lu unlink_ops_per_s=%lu\n",
+  printf("BENCH fs metadata create_ops_per_s=%lu unlink_ops_per_s=%lu\n",
          static_cast<unsigned long>(kMeta * 1000000000ull / (cns ? cns : 1)),
          static_cast<unsigned long>(kMeta * 1000000000ull / (uns ? uns : 1)));
   return 0;
