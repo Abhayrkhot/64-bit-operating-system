@@ -2,7 +2,7 @@
 
 #include "common/mem.hpp"
 
-namespace shale::elf {
+namespace os::elf {
 namespace {
 
 constexpr uint64_t kPage = 4096;
@@ -87,4 +87,4 @@ Error validate(const uint8_t* data, uint64_t size, uint64_t user_lo, uint64_t us
   return Error::kOk;
 }
 
-}  // namespace shale::elf
+}  // namespace os::elf

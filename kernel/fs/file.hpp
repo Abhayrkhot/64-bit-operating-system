@@ -3,7 +3,7 @@
 // user-copy themselves, so backends only see kernel memory.
 #pragma once
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 #include <stdint.h>
 
 struct File;
@@ -11,9 +11,9 @@ struct File;
 struct FileOps {
   int64_t (*read)(File* f, uint8_t* buf, uint64_t n);
   int64_t (*write)(File* f, const uint8_t* buf, uint64_t n);
-  int64_t (*stat)(File* f, shale::sys::Stat* st);
+  int64_t (*stat)(File* f, os::sys::Stat* st);
   // Fills `out` with entry `index`; returns 1, 0 at the end, or -errno.
-  int64_t (*readdir)(File* f, uint64_t index, shale::sys::DirEntry* out);
+  int64_t (*readdir)(File* f, uint64_t index, os::sys::DirEntry* out);
   int64_t (*fsync)(File* f);
   void (*release)(File* f);  // last reference dropped
   bool seekable;
@@ -22,7 +22,7 @@ struct FileOps {
 struct File {
   const FileOps* ops;
   uint32_t refs;
-  uint32_t type;  // shale::sys::kType*
+  uint32_t type;  // os::sys::kType*
   uint64_t offset;
   uint64_t flags;  // open flags
   void* priv;

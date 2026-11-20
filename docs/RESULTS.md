@@ -1,4 +1,4 @@
-# Shale: measured results
+# Measured results
 
 All numbers come from the code in this repository, run with the commands
 shown. Each table reports medians across runs or seeds, never the best run.
@@ -18,7 +18,7 @@ Reproduce everything with:
 scripts/dev.sh 'make -j all && python3 tools/bench.py --runs 5 && tools/campaigns.sh'
 ```
 
-## Crash consistency (ShaleFS)
+## Crash consistency (file system)
 
 ### Simulated crashes: `host/tools/crashsim`
 
@@ -42,7 +42,7 @@ A state fails if any of these happen:
 
 | Configuration | Crash states | Transactions replayed | Failed states | fsck failures | Durability violations | Atomic-replace violations |
 |---|---|---|---|---|---|---|
-| **ShaleFS (journal, torn writes)** | **97,074** | 1,589,369 | **0** | 0 | 0 | 0 |
+| **Journaling FS (torn writes)** | **97,074** | 1,589,369 | **0** | 0 | 0 | 0 |
 | Control: no journal (metadata written in place on commit) | 98,665 | 0 | 55,606 (56.4%) | 48,997 | 0 | 6,609 |
 | Control: recovery ignores commit-block CRC, torn writes | 97,074 | 1,590,432 | 4,499 (4.6%) | 1,063 | 974 | 2,462 |
 
@@ -53,13 +53,13 @@ damage:
   inodes).
 - **When recovery trusts commit blocks without the CRC,** it replays
   transactions whose blocks never reached the disk. The commit checksum is
-  what lets ShaleFS write a transaction's descriptor, metadata copies and
+  what lets the file system write a transaction's descriptor, metadata copies and
   commit block behind a single flush.
 
 ### Real crashes: `tools/crashtest.py`
 
 QEMU is SIGKILLed at a random point (0.05–2 s) while `/bin/fsstress` runs on a
-fresh 64 MiB virtio disk. Shale then boots again, recovers the disk (journal
+fresh 64 MiB virtio disk. The kernel then boots again, recovers the disk (journal
 replay) and runs fsck in the kernel. The host runs fsck again and checks
 fsstress's durability log line by line (every `DURABLE` file and every
 `REPLACE`) against the recovered files.
@@ -80,7 +80,7 @@ per-boot medians (`tools/bench.py`).
 |---|---|---|---|---|
 | Kernel thread → kernel thread, `yield()` (200k switches) | **47 ns** | 62 ns | 165 ns | 290 ns |
 | Timer-forced preemption, end to end | 1.51 µs | 3.93 µs | 7.54 µs | 26.8 µs |
-|   … of which Shale's path (timer handler entry → next thread running) | **388 ns** | 801 ns | 863 ns | 12.1 µs |
+|   … of which the kernel's path (timer handler entry → next thread running) | **388 ns** | 801 ns | 863 ns | 12.1 µs |
 |   … of which interrupt delivery by the hypervisor/emulator | 1.12 µs | 3.06 µs | 6.60 µs | — |
 | Process → process via `sys_yield` (syscall + scheduler + CR3 + FXSAVE/FXRSTOR + sysret) | **260 ns** | 290 ns | 20.3 µs | 34.5 µs |
 | `getpid` round trip from ring 3 | 65 ns | 79 ns | 16.2 µs | 37.9 µs |
@@ -89,7 +89,7 @@ per-boot medians (`tools/bench.py`).
 Notes:
 - **Preemption** samples the gap between the last instruction the preempted
   thread executed and the first one the next thread executes. Each sample is
-  split at the timer handler's entry timestamp, which separates Shale's code
+  split at the timer handler's entry timestamp, which separates the kernel's code
   from the hypervisor's interrupt injection.
 - **Process-switch** runs varied between 196 and 263 ns median across boots
   on the shared host.
@@ -98,7 +98,7 @@ Notes:
   PGE/SMAP/SMEP/UMIP are set to (`nopge nosmap nosmep noumip`). It isn't
   retranslation either: `-d in_asm` shows `syscall_entry` translated once.
   Kernel-internal switches under TCG take 165 ns, so the cost is the
-  emulator's privilege transition, not Shale's code.
+  emulator's privilege transition, not the kernel's code.
 
 ## Memory allocators
 
@@ -112,7 +112,7 @@ runs, on traces replayed identically to every allocator.
 
 | Allocator | Occupancy | Free memory in aligned 64 KiB blocks | Free memory in aligned 2 MiB blocks | 2 MiB requests failed despite enough free memory |
 |---|---|---|---|---|
-| **Buddy (Shale)** | 79.2% | **98.9%** | **89.2%** | 0 |
+| **Buddy (this kernel)** | 79.2% | **98.9%** | **89.2%** | 0 |
 | First-fit extent list | 79.2% | 95.5% | 77.6% | 0 |
 | Next-fit bitmap | 41.6% | 28.2% | 0.0% | 28,331 |
 
@@ -129,7 +129,7 @@ after 1M of warm-up.
 
 | Heap | Steady-state overhead (1 − live/footprint) | Peak footprint | Footprint after freeing 90% of objects |
 |---|---|---|---|
-| **Slab, typed caches (Shale)** | **5.2%** | 16.1 MiB | **11.9 MiB** |
+| **Slab, typed caches (this kernel)** | **5.2%** | 16.1 MiB | **11.9 MiB** |
 | Slab, size classes only | 18.7% | 18.7 MiB | 9.7 MiB |
 | First-fit, boundary tags | 9.4% | 17.0 MiB | 16.3 MiB |
 | Best-fit, boundary tags | 6.3% | 16.2 MiB | 15.9 MiB |
@@ -164,7 +164,7 @@ Merging contiguous blocks into one request is the next step.
 | Check | Result |
 |---|---|
 | In-kernel tests (`make ktest`) | 34/34 under KVM and TCG; also on CI (AMD EPYC, KVM and TCG) |
-| Host tests (`make htest`) | 21/21 (allocators against shadow models, ELF rules, ShaleFS model checks) |
+| Host tests (`make htest`) | 21/21 (allocators against shadow models, ELF rules, file-system model checks) |
 | Syscall fuzzing from ring 3 (`sysfuzz`, 3 seeds × 200k calls) | 0 kernel crashes; free memory back to the byte afterwards; allocator invariants hold |
 | ELF validator under libFuzzer + ASan/UBSan | 27.7M executions in 2 min, no crash or postcondition violation (CI: 19.4M in 1 min) |
 | Faults in ring 3 (16 kinds: null, kernel read/write, W^X, NX stack/heap, `cli`/`hlt`/port I/O/CR3, UMIP `sgdt`, stack overflow, `#UD`, `#DE`, hostile pointers to syscalls) | Only the faulting process dies, with the right status |

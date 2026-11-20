@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""End-to-end crash test: kill QEMU while the kernel runs fsstress on ShaleFS.
+"""End-to-end crash test: kill QEMU while the kernel runs fsstress on its file system.
 
 Each trial:
-  1. format a fresh disk image on the host (build/host/shalefs mkfs)
-  2. boot Shale with run=/bin/fsstress; SIGKILL QEMU at a random moment
+  1. format a fresh disk image on the host (build/host/fstool mkfs)
+  2. boot the kernel with run=/bin/fsstress; SIGKILL QEMU at a random moment
      after the workload starts (a power cut as far as the guest is concerned)
-  3. boot Shale again in `fsck` mode: the kernel mounts the disk (replaying
+  3. boot the kernel again in `fsck` mode: the kernel mounts the disk (replaying
      its journal), unmounts and runs fsck
   4. on the host, run fsck again and check fsstress's durability log against
      the recovered files:
@@ -26,7 +26,7 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SHALEFS = os.path.join(ROOT, "build/host/shalefs")
+FSTOOL = os.path.join(ROOT, "build/host/fstool")
 QEMU_PY = os.path.join(ROOT, "tools/qemu.py")
 
 
@@ -81,7 +81,7 @@ def recover_in_kernel(disk, accel):
 
 
 def host_crc(disk, path):
-    out = subprocess.run([SHALEFS, "crc", disk, path], capture_output=True, text=True).stdout.strip()
+    out = subprocess.run([FSTOOL, "crc", disk, path], capture_output=True, text=True).stdout.strip()
     if out == "missing" or not out:
         return None
     n, crc = out.split()
@@ -140,15 +140,15 @@ def main():
 
     rng = random.Random(args.seed)
     totals = {"trials": 0, "killed_mid_run": 0, "fsck_errors": 0, "durability": 0, "replayed": 0, "checked_files": 0}
-    tmp = tempfile.mkdtemp(prefix="shale-crash-")
+    tmp = tempfile.mkdtemp(prefix="os-crash-")
     for trial in range(args.trials):
         disk = os.path.join(tmp, "disk.img")
-        subprocess.run([SHALEFS, "mkfs", disk, str(args.disk_mib)], check=True, capture_output=True)
+        subprocess.run([FSTOOL, "mkfs", disk, str(args.disk_mib)], check=True, capture_output=True)
         seed = rng.randrange(1, 1 << 30)
         kill_after = rng.uniform(0.05, args.max_kill)
         lines, finished = run_until_killed(disk, seed, args.ops, kill_after, args.accel)
         errors, replayed, log = recover_in_kernel(disk, args.accel)
-        host = subprocess.run([SHALEFS, "fsck", disk], capture_output=True, text=True)
+        host = subprocess.run([FSTOOL, "fsck", disk], capture_output=True, text=True)
         problems, ndurable, nreplace = check_durability(disk, lines)
         ok = errors == 0 and host.returncode == 0 and not problems
         totals["trials"] += 1

@@ -1,6 +1,6 @@
 #include "util/crc32c.hpp"
 
-namespace shale {
+namespace os {
 namespace {
 
 struct Table {
@@ -24,4 +24,4 @@ uint32_t crc32c(uint32_t crc, const void* data, size_t n) {
   return ~crc;
 }
 
-}  // namespace shale
+}  // namespace os

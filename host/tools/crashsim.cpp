@@ -1,4 +1,4 @@
-// crashsim: systematic crash-consistency testing of ShaleFS (in the spirit of
+// crashsim: systematic crash-consistency testing of the file system (in the spirit of
 // CrashMonkey/ALICE).
 //
 // 1. Run a seeded workload (writes, appends, overwrites, truncates, unlinks,
@@ -27,12 +27,12 @@
 
 #include "common/blockdevs.hpp"
 #include "fs/fsck.hpp"
-#include "fs/shalefs.hpp"
+#include "fs/filesystem.hpp"
 #include "util/random.hpp"
 
-using shale::fs::FsckReport;
-using shale::fs::InodeInfo;
-using shale::fs::ShaleFs;
+using os::fs::FsckReport;
+using os::fs::InodeInfo;
+using os::fs::FileSystem;
 
 namespace {
 
@@ -69,7 +69,7 @@ struct Recorded {
   std::map<std::string, std::vector<Version>> replaced;
 };
 
-std::string make_content(shale::Random& rng, size_t n, uint64_t tag) {
+std::string make_content(os::Random& rng, size_t n, uint64_t tag) {
   std::string s(n, '\0');
   for (size_t i = 0; i < n; i++) s[i] = static_cast<char>((rng.next() & 0xFF) ^ (tag & 0xFF));
   if (n >= 8) std::memcpy(&s[0], &tag, 8);  // versions are distinguishable
@@ -83,7 +83,7 @@ size_t last_flush(const host::RecordingDevice& rec) {
   return SIZE_MAX;
 }
 
-int write_whole(ShaleFs& fs, const std::string& path, const std::string& data) {
+int write_whole(FileSystem& fs, const std::string& path, const std::string& data) {
   uint32_t ino;
   int r = fs.create(path.c_str(), false, &ino);
   if (r < 0) return r;
@@ -91,8 +91,8 @@ int write_whole(ShaleFs& fs, const std::string& path, const std::string& data) {
   return fs.write(ino, 0, data.data(), data.size()) == static_cast<int64_t>(data.size()) ? 0 : -1;
 }
 
-ShaleFs::Options mount_options(const Config& c, uint32_t cache) {
-  ShaleFs::Options o;
+FileSystem::Options mount_options(const Config& c, uint32_t cache) {
+  FileSystem::Options o;
   o.cache_blocks = cache;
   o.max_txn_blocks = 64;
   o.trust_commit_blocks = c.trust_commits;
@@ -101,12 +101,12 @@ ShaleFs::Options mount_options(const Config& c, uint32_t cache) {
 
 // Runs the workload, filling `rec` with the write log and `out` with the oracle.
 void run_workload(const Config& c, host::RecordingDevice* rec, Recorded* out) {
-  ShaleFs fs;
+  FileSystem fs;
   if (fs.mount(rec, mount_options(c, 256)) != 0) {
     std::fprintf(stderr, "crashsim: workload mount failed\n");
     std::exit(2);
   }
-  shale::Random rng(c.seed);
+  os::Random rng(c.seed);
   std::map<std::string, std::string> model;  // live file contents
   const char* dirs[] = {"", "/d0", "/d1", "/d2"};
   for (int i = 1; i < 4; i++) fs.mkdir(dirs[i]);
@@ -204,7 +204,7 @@ void note(Totals& t, const std::string& s) {
   if (t.examples.size() < 8) t.examples.push_back(s);
 }
 
-std::string read_file(ShaleFs& fs, const std::string& path, bool* exists) {
+std::string read_file(FileSystem& fs, const std::string& path, bool* exists) {
   uint32_t ino;
   *exists = fs.lookup(path.c_str(), &ino) == 0;
   if (!*exists) return {};
@@ -222,7 +222,7 @@ void check_state(const Config& c, host::OverlayDevice* dev, const Recorded& rec,
                  Totals* t, const std::string& label) {
   t->states++;
   {
-    ShaleFs fs;
+    FileSystem fs;
     if (fs.mount(dev, mount_options(c, 128)) != 0) {
       t->mount_failures++;
       note(*t, label + ": mount failed");
@@ -232,12 +232,12 @@ void check_state(const Config& c, host::OverlayDevice* dev, const Recorded& rec,
     fs.unmount();
   }
   FsckReport rep;
-  shale::fs::fsck(dev, &rep);
+  os::fs::fsck(dev, &rep);
   if (rep.errors) {
     t->fsck_failures++;
     note(*t, label + ": fsck: " + rep.messages[0] + (rep.errors > 1 ? " (+" + std::to_string(rep.errors - 1) + ")" : ""));
   }
-  ShaleFs fs;
+  FileSystem fs;
   if (fs.mount(dev, mount_options(c, 128)) != 0) {
     t->mount_failures++;
     return;
@@ -310,11 +310,11 @@ int main(int argc, char** argv) {
   }
 
   host::MemDevice base(c.blocks);
-  ShaleFs::MkfsOptions mo;
+  FileSystem::MkfsOptions mo;
   mo.journaling = c.journaling;
   mo.journal_blocks = 512;
   mo.uuid = 0xC0FFEE00ull + c.seed;
-  if (ShaleFs::mkfs(&base, mo) != 0) return 2;
+  if (FileSystem::mkfs(&base, mo) != 0) return 2;
   host::MemDevice work(c.blocks);
   work.bytes() = base.bytes();
   host::RecordingDevice rec(&work);
@@ -331,7 +331,7 @@ int main(int argc, char** argv) {
   flush_idx.push_back(ev.size());  // the tail after the last flush
   size_t epochs = flush_idx.size();
   size_t per_epoch = std::max<size_t>(1, static_cast<size_t>(c.states) / epochs);
-  shale::Random rng(c.seed * 7919 + 1);
+  os::Random rng(c.seed * 7919 + 1);
   Totals t;
   host::MemDevice durable(c.blocks);  // image with every write before the current epoch
   durable.bytes() = base.bytes();
@@ -371,10 +371,10 @@ int main(int argc, char** argv) {
   // A clean unmount of the full workload must also check out.
   {
     host::OverlayDevice full(&durable);
-    ShaleFs fs;
+    FileSystem fs;
     bool ok = fs.mount(&full, mount_options(c, 128)) == 0 && fs.unmount() == 0;
     FsckReport rep;
-    shale::fs::fsck(&full, &rep);
+    os::fs::fsck(&full, &rep);
     if (!ok || rep.errors) note(t, std::string("final image: ") + (ok ? rep.messages[0] : "mount failed"));
   }
 

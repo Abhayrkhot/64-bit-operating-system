@@ -14,11 +14,11 @@
 
 namespace {
 
-using namespace shale::sys;
+using namespace os::sys;
 
 int run(const char* const* argv) {
   char path[64];
-  shale::fmt::format(path, sizeof(path), "/bin/%s", argv[0]);
+  os::fmt::format(path, sizeof(path), "/bin/%s", argv[0]);
   int pid = process::spawn(path, argv, process::kernel());
   if (pid < 0) return pid - 1000;
   int status = -1;
@@ -85,14 +85,14 @@ KTEST(user_syscall_fuzz_no_crash_no_leak) {
   long iters = cmdline::get_long("fuzz_iters", 200000);
   long seeds = cmdline::get_long("fuzz_seeds", 3);
   char count[24];
-  shale::fmt::format(count, sizeof(count), "%ld", iters);
+  os::fmt::format(count, sizeof(count), "%ld", iters);
   const char* warm[] = {"sysfuzz", "100", "99", nullptr};
   run(warm);
   settle();
   uint64_t before = pmm::free_bytes();
   for (long s = 1; s <= seeds; s++) {
     char seed[24];
-    shale::fmt::format(seed, sizeof(seed), "%ld", s);
+    os::fmt::format(seed, sizeof(seed), "%ld", s);
     const char* argv[] = {"sysfuzz", count, seed, nullptr};
     KEXPECT_EQ(run(argv), 0);
   }

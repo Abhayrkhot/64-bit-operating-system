@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Boot Shale under QEMU + OVMF and report how the run ended.
+"""Boot the OS under QEMU + OVMF and report how the run ended.
 
-The kernel reads its command line from fw_cfg (opt/shale/cmdline) and ends a
+The kernel reads its command line from fw_cfg (opt/os/cmdline) and ends a
 test or benchmark run through the isa-debug-exit device:
     exit status 33 = pass, 35 = failure, 37 = panic.
 
@@ -43,7 +43,7 @@ def build_command(args, vars_path):
         "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
     ]
     if args.cmdline:  # QEMU rejects an empty fw_cfg string; no file means "default boot"
-        cmd += ["-fw_cfg", "name=opt/shale/cmdline,string=" + args.cmdline.replace(",", ",,")]
+        cmd += ["-fw_cfg", "name=opt/os/cmdline,string=" + args.cmdline.replace(",", ",,")]
     for i, disk in enumerate(args.disk):
         cmd += ["-drive", f"if=none,id=data{i},format=raw,cache=writeback,file={disk}",
                 "-device", f"virtio-blk-pci,drive=data{i},disable-modern=on"]
@@ -72,7 +72,7 @@ def main():
 
     if not os.path.exists(args.esp):
         sys.exit(f"qemu.py: {args.esp} missing; run make first")
-    tmp = tempfile.mkdtemp(prefix="shale-qemu-")
+    tmp = tempfile.mkdtemp(prefix="os-qemu-")
     try:
         vars_path = os.path.join(tmp, "OVMF_VARS.fd")
         shutil.copy(OVMF_VARS, vars_path)

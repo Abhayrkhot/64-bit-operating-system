@@ -52,7 +52,7 @@ void init(uint64_t phys, uint64_t size) {
       e.data = base + off + 512;
       e.size = fsize;
     }
-    off += 512 + shale::align_up(fsize, 512);
+    off += 512 + os::align_up(fsize, 512);
   }
   kprintf("initrd: %u files\n", g_count);
 }

@@ -1,8 +1,8 @@
-// fragbench: trace-driven fragmentation comparison of Shale's allocators
+// fragbench: trace-driven fragmentation comparison of the kernel's allocators
 // against textbook baselines. All allocators replay the same seeded trace.
 //
 // Page level (1 GiB of 4 KiB frames, power-of-two requests, ~80% occupancy):
-//   buddy      Shale's BuddyAllocator (lib/mm/buddy.cpp, the kernel's code)
+//   buddy      the kernel's BuddyAllocator (lib/mm/buddy.cpp, the kernel's code)
 //   first-fit  address-ordered free-extent list
 //   next-fit   bitmap with a roving pointer (common in hobby kernels)
 // Metric: share of free memory that sits in naturally aligned fully free
@@ -10,7 +10,7 @@
 // requests that failed although enough total memory was free.
 //
 // Heap level (kernel-object mix, ~42k live objects, ~16 MB live):
-//   slab       Shale's Heap (lib/mm/heap.cpp) over the buddy allocator
+//   slab       the kernel's Heap (lib/mm/heap.cpp) over the buddy allocator
 //   first-fit  address-ordered first fit, boundary tags, 8-byte headers
 //   best-fit   best fit, same block format
 // Metric: overhead = 1 - live_bytes / footprint (footprint = memory taken
@@ -35,9 +35,9 @@
 #include "mm/heap.hpp"
 #include "util/random.hpp"
 
-using shale::Random;
-using shale::mm::BuddyAllocator;
-using shale::mm::FrameMeta;
+using os::Random;
+using os::mm::BuddyAllocator;
+using os::mm::FrameMeta;
 
 namespace {
 
@@ -65,7 +65,7 @@ struct BuddyPages : PageAlloc {
     b.init(meta.data(), kFrames);
     b.add_free_range(0, kFrames);
   }
-  const char* name() const override { return "buddy (Shale)"; }
+  const char* name() const override { return "buddy (kernel)"; }
   int64_t alloc(uint32_t pages) override {
     uint32_t f = b.alloc_exact(pages);
     return f == BuddyAllocator::kNone ? -1 : f;
@@ -252,7 +252,7 @@ struct SlabHeap : HeapAlloc {
   uint8_t* arena = map_arena();
   std::vector<FrameMeta> meta{kArenaBytes / 4096};
   BuddyAllocator buddy;
-  shale::mm::Heap heap;
+  os::mm::Heap heap;
   bool typed;
   int cache_of[kNumTypes];
   explicit SlabHeap(bool use_typed_caches) : typed(use_typed_caches) {
@@ -264,7 +264,7 @@ struct SlabHeap : HeapAlloc {
       cache_of[i] = typed && t.min_size == t.max_size && t.min_size <= 4096 - 64 ? heap.create_cache(t.min_size) : -1;
     }
   }
-  const char* name() const override { return typed ? "slab (Shale, typed caches)" : "slab (Shale, kmalloc only)"; }
+  const char* name() const override { return typed ? "slab (kernel, typed caches)" : "slab (kernel, kmalloc only)"; }
   void* alloc(size_t size) override { return heap.alloc(size); }
   void* alloc_typed(unsigned type, size_t size) override {
     return cache_of[type] >= 0 ? heap.alloc_from(cache_of[type]) : heap.alloc(size);

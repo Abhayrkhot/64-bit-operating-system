@@ -51,9 +51,9 @@ int64_t con_write(File*, const uint8_t* buf, uint64_t n) {
   return static_cast<int64_t>(n);
 }
 
-int64_t con_stat(File*, shale::sys::Stat* st) {
+int64_t con_stat(File*, os::sys::Stat* st) {
   *st = {};
-  st->type = shale::sys::kTypeConsole;
+  st->type = os::sys::kTypeConsole;
   return 0;
 }
 
@@ -67,6 +67,6 @@ void init() {
   serial::enable_rx_interrupt();
 }
 
-File* open() { return file_alloc(&kOps, shale::sys::kTypeConsole, shale::sys::kOReadWrite, nullptr); }
+File* open() { return file_alloc(&kOps, os::sys::kTypeConsole, os::sys::kOReadWrite, nullptr); }
 
 }  // namespace console

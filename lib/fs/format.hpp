@@ -1,4 +1,4 @@
-// ShaleFS on-disk format (version 1). All integers little endian, 4 KiB blocks.
+// File-system on-disk format (version 1). All integers little endian, 4 KiB blocks.
 //
 //   block 0, 1        superblock slots A and B (written alternately; the valid
 //                     one with the higher sb_seq wins at mount)
@@ -17,10 +17,10 @@
 
 #include <stdint.h>
 
-namespace shale::fs {
+namespace os::fs {
 
 constexpr uint32_t kBlockSize = 4096;
-constexpr uint64_t kMagic = 0x3153464c41485321ull;  // "!SHALFS1"
+constexpr uint64_t kMagic = 0x313053464c4e4a21ull;  // "!JNLFS01"
 constexpr uint32_t kVersion = 1;
 constexpr uint32_t kRootInode = 1;
 constexpr uint32_t kInodeSize = 128;
@@ -105,4 +105,4 @@ struct JournalCommit {
   uint32_t crc;           // CRC32C of this struct with crc = 0
 };
 
-}  // namespace shale::fs
+}  // namespace os::fs

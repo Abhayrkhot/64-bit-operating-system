@@ -1,14 +1,14 @@
-// Shale user-space C library (tiny): system call wrappers, stdio, malloc.
+// User-space C library (tiny): system call wrappers, stdio, malloc.
 #pragma once
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "common/mem.hpp"
 
-namespace sys = shale::sys;
+namespace sys = os::sys;
 
 // Programs define `int main(int argc, char** argv)`. Freestanding C++ doesn't
 // treat main specially, so give it C linkage for crt0 to find.

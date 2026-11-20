@@ -8,7 +8,7 @@
 
 #include "elf/validate.hpp"
 
-using namespace shale::elf;
+using namespace os::elf;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   constexpr uint64_t kLo = 0x10000, kHi = 0x0000010000000000ull;

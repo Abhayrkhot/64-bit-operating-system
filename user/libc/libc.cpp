@@ -1,4 +1,4 @@
-#include "shale.hpp"
+#include "libc.hpp"
 
 #include "fmt/format.hpp"
 
@@ -19,7 +19,7 @@ void exit(int code) {
 namespace {
 int vdprintf(int fd, const char* fmt, va_list ap) {
   char buf[1024];
-  int n = shale::fmt::vformat(buf, sizeof(buf), fmt, ap);
+  int n = os::fmt::vformat(buf, sizeof(buf), fmt, ap);
   write(fd, buf, static_cast<uint64_t>(n < static_cast<int>(sizeof(buf)) ? n : sizeof(buf) - 1));
   return n;
 }
@@ -44,7 +44,7 @@ int dprintf(int fd, const char* fmt, ...) {
 int snprintf(char* buf, size_t size, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  int n = shale::fmt::vformat(buf, size, fmt, ap);
+  int n = os::fmt::vformat(buf, size, fmt, ap);
   va_end(ap);
   return n;
 }
@@ -100,7 +100,7 @@ unsigned class_of(size_t n) {
 void* carve(uint64_t bytes) {
   if (!g_brk_cur) g_brk_cur = g_brk_end = brk(0);
   if (g_brk_cur + bytes > g_brk_end) {
-    uint64_t want = shale::align_up(g_brk_cur + bytes, 64 * 1024);
+    uint64_t want = os::align_up(g_brk_cur + bytes, 64 * 1024);
     if (brk(want) != want) return nullptr;
     g_brk_end = want;
   }
@@ -126,7 +126,7 @@ void* malloc(size_t n) {
     h->magic = kMagic;
     return h + 1;
   }
-  uint64_t len = shale::align_up(n + sizeof(Header), 4096);
+  uint64_t len = os::align_up(n + sizeof(Header), 4096);
   int64_t addr = mmap(len, sys::kProtRead | sys::kProtWrite);
   if (addr < 0) return nullptr;
   auto* h = reinterpret_cast<Header*>(addr);

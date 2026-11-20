@@ -11,7 +11,7 @@
 //   REPLACE <path> <len> <crc>     the replace and an fsync of <path> returned
 // After the kill, the host recovers the disk and checks every DURABLE file
 // not MODIFYed since, and that replaced files hold a complete version.
-#include "shale.hpp"
+#include "libc.hpp"
 #include "util/crc32c.hpp"
 #include "util/random.hpp"
 
@@ -29,7 +29,7 @@ Model g_files[kFiles];
 
 void path_of(int i, char* out) { snprintf(out, 32, "/stress/f%02d", i); }
 
-uint32_t crc_of(const Model& m) { return shale::crc32c(m.data, m.len); }
+uint32_t crc_of(const Model& m) { return os::crc32c(m.data, m.len); }
 
 void report_durable(int i) {
   char p[32];
@@ -37,7 +37,7 @@ void report_durable(int i) {
   printf("DURABLE %s %lu %u\n", p, g_files[i].len, crc_of(g_files[i]));
 }
 
-void fill(shale::Random& rng, uint8_t* p, uint64_t n) {
+void fill(os::Random& rng, uint8_t* p, uint64_t n) {
   for (uint64_t i = 0; i < n; i++) p[i] = static_cast<uint8_t>(rng.next());
 }
 
@@ -46,7 +46,7 @@ void fill(shale::Random& rng, uint8_t* p, uint64_t n) {
 int main(int argc, char** argv) {
   uint64_t seed = argc > 1 ? static_cast<uint64_t>(atol(argv[1])) : 1;
   long ops = argc > 2 ? atol(argv[2]) : 2000;
-  shale::Random rng(seed);
+  os::Random rng(seed);
   mkdir("/stress");
   for (auto& f : g_files) f.data = static_cast<uint8_t*>(malloc(kMaxFile));
   auto* scratch = static_cast<uint8_t*>(malloc(kMaxFile));
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
       snprintf(tmp, sizeof(tmp), "%s.tmp", target);
       uint64_t n = 64 + rng.below(30000);
       fill(rng, scratch, n);
-      uint32_t crc = shale::crc32c(scratch, n);
+      uint32_t crc = os::crc32c(scratch, n);
       int fd = open(tmp, sys::kOWrite | sys::kOCreate | sys::kOTruncate);
       if (fd < 0) continue;
       bool ok = write(fd, scratch, n) == static_cast<int64_t>(n) && fsync(fd) == 0;

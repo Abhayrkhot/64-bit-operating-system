@@ -1,4 +1,4 @@
-// Boot protocol between the Shale UEFI loader and the kernel.
+// Boot protocol between the UEFI loader and the kernel.
 //
 // The loader leaves the CPU in long mode with interrupts off and its own page
 // tables loaded:
@@ -11,9 +11,9 @@
 
 #include <stdint.h>
 
-namespace shale {
+namespace os {
 
-constexpr uint64_t kBootInfoMagic = 0x4f4f42454c414853ull;  // "SHALEBOO"
+constexpr uint64_t kBootInfoMagic = 0x4f464e49544f4f42ull;  // "BOOTINFO"
 constexpr uint64_t kHhdmBase = 0xFFFF800000000000ull;
 constexpr uint64_t kKernelBase = 0xFFFFFFFF80000000ull;
 constexpr uint64_t kPageSize = 4096;
@@ -73,4 +73,4 @@ struct BootInfo {
   char cmdline[256];
 };
 
-}  // namespace shale
+}  // namespace os

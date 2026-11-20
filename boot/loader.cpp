@@ -1,11 +1,11 @@
-// Shale UEFI loader.
+// UEFI loader.
 //
 // Loads \kernel.elf (and optionally \initrd.tar and \cmdline.txt) from the
 // volume it was started from, builds page tables for the kernel, exits boot
-// services and jumps to the kernel. See include/shale/bootinfo.hpp for the
+// services and jumps to the kernel. See include/abi/bootinfo.hpp for the
 // hand-off contract.
-#include <shale/bootinfo.hpp>
-#include <shale/elf.hpp>
+#include <abi/bootinfo.hpp>
+#include <abi/elf.hpp>
 
 #include "efi.hpp"
 
@@ -83,7 +83,7 @@ void print_dec(uint64_t v) {
 }
 
 [[noreturn]] void fail(const char* what, Status st) {
-  print("shale-boot: error: ");
+  print("loader: error: ");
   print(what);
   print(" (status ");
   print_hex(st);
@@ -98,7 +98,7 @@ void check(Status st, const char* what) {
 uint64_t alloc_pages(uint64_t pages, uint32_t type) {
   PhysAddr addr = 0;
   check(g_bs->allocate_pages(kAllocateAnyPages, type, pages, &addr), "AllocatePages");
-  memset(reinterpret_cast<void*>(addr), 0, pages * shale::kPageSize);
+  memset(reinterpret_cast<void*>(addr), 0, pages * os::kPageSize);
   return addr;
 }
 
@@ -115,7 +115,7 @@ bool read_file(File* root, const Char16* path, uint32_t mem_type, FileData* out)
   check(f->set_position(f, ~0ull), "SetPosition(end)");
   check(f->get_position(f, &size), "GetPosition");
   check(f->set_position(f, 0), "SetPosition(0)");
-  uint64_t pages = (size + shale::kPageSize - 1) / shale::kPageSize;
+  uint64_t pages = (size + os::kPageSize - 1) / os::kPageSize;
   uint64_t addr = alloc_pages(pages ? pages : 1, mem_type);
   UINTN n = size;
   check(f->read(f, &n, reinterpret_cast<void*>(addr)), "Read");
@@ -130,7 +130,7 @@ uint64_t* table_at(uint64_t entry) { return reinterpret_cast<uint64_t*>(entry & 
 
 uint64_t* next_table(uint64_t* table, unsigned index) {
   if (!(table[index] & kPresent))
-    table[index] = alloc_pages(1, shale::kEfiMemBootData) | kPresent | kWritable;
+    table[index] = alloc_pages(1, os::kEfiMemBootData) | kPresent | kWritable;
   return table_at(table[index]);
 }
 
@@ -151,23 +151,23 @@ struct KernelImage {
 // Validates the kernel ELF and copies its PT_LOAD segments into one physically
 // contiguous allocation.
 KernelImage load_kernel(const FileData& file) {
-  if (file.size < sizeof(shale::elf::Ehdr)) fail("kernel.elf too small", file.size);
-  const auto& eh = *reinterpret_cast<const shale::elf::Ehdr*>(file.data);
-  if (!shale::elf::has_valid_ident(eh) || eh.type != shale::elf::kTypeExec ||
-      eh.machine != shale::elf::kMachineX8664 || eh.phentsize != sizeof(shale::elf::Phdr))
+  if (file.size < sizeof(os::elf::Ehdr)) fail("kernel.elf too small", file.size);
+  const auto& eh = *reinterpret_cast<const os::elf::Ehdr*>(file.data);
+  if (!os::elf::has_valid_ident(eh) || eh.type != os::elf::kTypeExec ||
+      eh.machine != os::elf::kMachineX8664 || eh.phentsize != sizeof(os::elf::Phdr))
     fail("kernel.elf is not an x86-64 ELF64 executable", 0);
-  if (eh.phoff > file.size || eh.phnum * sizeof(shale::elf::Phdr) > file.size - eh.phoff)
+  if (eh.phoff > file.size || eh.phnum * sizeof(os::elf::Phdr) > file.size - eh.phoff)
     fail("kernel.elf program headers out of bounds", eh.phoff);
-  const auto* ph = reinterpret_cast<const shale::elf::Phdr*>(file.data + eh.phoff);
+  const auto* ph = reinterpret_cast<const os::elf::Phdr*>(file.data + eh.phoff);
 
   uint64_t lo = ~0ull, hi = 0;
   for (unsigned i = 0; i < eh.phnum; i++) {
-    if (ph[i].type != shale::elf::kPtLoad || ph[i].memsz == 0) continue;
-    if (ph[i].vaddr < shale::kKernelBase || ph[i].filesz > ph[i].memsz ||
+    if (ph[i].type != os::elf::kPtLoad || ph[i].memsz == 0) continue;
+    if (ph[i].vaddr < os::kKernelBase || ph[i].filesz > ph[i].memsz ||
         ph[i].offset > file.size || ph[i].filesz > file.size - ph[i].offset)
       fail("bad kernel segment", i);
-    uint64_t start = ph[i].vaddr & ~(shale::kPageSize - 1);
-    uint64_t end = (ph[i].vaddr + ph[i].memsz + shale::kPageSize - 1) & ~(shale::kPageSize - 1);
+    uint64_t start = ph[i].vaddr & ~(os::kPageSize - 1);
+    uint64_t end = (ph[i].vaddr + ph[i].memsz + os::kPageSize - 1) & ~(os::kPageSize - 1);
     if (start < lo) lo = start;
     if (end > hi) hi = end;
   }
@@ -175,11 +175,11 @@ KernelImage load_kernel(const FileData& file) {
 
   KernelImage k;
   k.virt = lo;
-  k.pages = (hi - lo) / shale::kPageSize;
-  k.phys = alloc_pages(k.pages, shale::kEfiMemKernelImage);  // zeroed: covers .bss
+  k.pages = (hi - lo) / os::kPageSize;
+  k.phys = alloc_pages(k.pages, os::kEfiMemKernelImage);  // zeroed: covers .bss
   k.entry = eh.entry;
   for (unsigned i = 0; i < eh.phnum; i++) {
-    if (ph[i].type != shale::elf::kPtLoad || ph[i].memsz == 0) continue;
+    if (ph[i].type != os::elf::kPtLoad || ph[i].memsz == 0) continue;
     memcpy(reinterpret_cast<void*>(k.phys + (ph[i].vaddr - lo)), file.data + ph[i].offset, ph[i].filesz);
   }
   return k;
@@ -194,46 +194,46 @@ bool cpu_has_nx() {
 // Builds the hand-off page tables: identity + HHDM for [0, top) and the
 // kernel image at its link address.
 uint64_t* build_page_tables(const KernelImage& k, const uint8_t* elf_file, uint64_t top, bool nx) {
-  auto* pml4 = reinterpret_cast<uint64_t*>(alloc_pages(1, shale::kEfiMemBootData));
+  auto* pml4 = reinterpret_cast<uint64_t*>(alloc_pages(1, os::kEfiMemBootData));
   for (uint64_t gb = 0; gb < top / kGiB; gb++) {
     uint64_t* pdpt = next_table(pml4, static_cast<unsigned>(gb / 512));
     pml4[256 + gb / 512] = pml4[gb / 512];  // HHDM shares the identity PDPTs
-    auto* pd = reinterpret_cast<uint64_t*>(alloc_pages(1, shale::kEfiMemBootData));
+    auto* pd = reinterpret_cast<uint64_t*>(alloc_pages(1, os::kEfiMemBootData));
     pdpt[gb % 512] = reinterpret_cast<uint64_t>(pd) | kPresent | kWritable;
     for (uint64_t i = 0; i < 512; i++) pd[i] = (gb * kGiB + (i << 21)) | kPresent | kWritable | kHuge;
   }
 
-  const auto& eh = *reinterpret_cast<const shale::elf::Ehdr*>(elf_file);
-  const auto* ph = reinterpret_cast<const shale::elf::Phdr*>(elf_file + eh.phoff);
+  const auto& eh = *reinterpret_cast<const os::elf::Ehdr*>(elf_file);
+  const auto* ph = reinterpret_cast<const os::elf::Phdr*>(elf_file + eh.phoff);
   for (unsigned i = 0; i < eh.phnum; i++) {
-    if (ph[i].type != shale::elf::kPtLoad || ph[i].memsz == 0) continue;
+    if (ph[i].type != os::elf::kPtLoad || ph[i].memsz == 0) continue;
     uint64_t flags = kPresent;
-    if (ph[i].flags & shale::elf::kPfW) flags |= kWritable;
-    if (!(ph[i].flags & shale::elf::kPfX) && nx) flags |= kNoExecute;
-    uint64_t start = ph[i].vaddr & ~(shale::kPageSize - 1);
-    uint64_t end = (ph[i].vaddr + ph[i].memsz + shale::kPageSize - 1) & ~(shale::kPageSize - 1);
-    for (uint64_t va = start; va < end; va += shale::kPageSize) map_page(pml4, va, k.phys + (va - k.virt), flags);
+    if (ph[i].flags & os::elf::kPfW) flags |= kWritable;
+    if (!(ph[i].flags & os::elf::kPfX) && nx) flags |= kNoExecute;
+    uint64_t start = ph[i].vaddr & ~(os::kPageSize - 1);
+    uint64_t end = (ph[i].vaddr + ph[i].memsz + os::kPageSize - 1) & ~(os::kPageSize - 1);
+    for (uint64_t va = start; va < end; va += os::kPageSize) map_page(pml4, va, k.phys + (va - k.virt), flags);
   }
   return pml4;
 }
 
-shale::MemKind classify(uint32_t type) {
+os::MemKind classify(uint32_t type) {
   switch (type) {
-    case kConventionalMemory: return shale::MemKind::kUsable;
+    case kConventionalMemory: return os::MemKind::kUsable;
     case kLoaderCode:
     case kLoaderData:
     case kBootServicesCode:
-    case kBootServicesData: return shale::MemKind::kLoaderReclaimable;
-    case kAcpiReclaimMemory: return shale::MemKind::kAcpiReclaimable;
-    case kAcpiMemoryNvs: return shale::MemKind::kAcpiNvs;
+    case kBootServicesData: return os::MemKind::kLoaderReclaimable;
+    case kAcpiReclaimMemory: return os::MemKind::kAcpiReclaimable;
+    case kAcpiMemoryNvs: return os::MemKind::kAcpiNvs;
     case kMemoryMappedIo:
-    case kMemoryMappedIoPortSpace: return shale::MemKind::kMmio;
+    case kMemoryMappedIoPortSpace: return os::MemKind::kMmio;
     case kRuntimeServicesCode:
-    case kRuntimeServicesData: return shale::MemKind::kRuntimeServices;
-    case shale::kEfiMemKernelImage: return shale::MemKind::kKernel;
-    case shale::kEfiMemBootData: return shale::MemKind::kBootData;
-    case shale::kEfiMemInitrd: return shale::MemKind::kInitrd;
-    default: return shale::MemKind::kReserved;
+    case kRuntimeServicesData: return os::MemKind::kRuntimeServices;
+    case os::kEfiMemKernelImage: return os::MemKind::kKernel;
+    case os::kEfiMemBootData: return os::MemKind::kBootData;
+    case os::kEfiMemInitrd: return os::MemKind::kInitrd;
+    default: return os::MemKind::kReserved;
   }
 }
 
@@ -247,9 +247,9 @@ uint64_t direct_map_top(const uint8_t* map, UINTN map_size, UINTN desc_size) {
   uint64_t top = 4 * kGiB;
   for (UINTN i = 0; i < map_size / desc_size; i++) {
     const auto* d = desc_at(map, desc_size, i);
-    shale::MemKind kind = classify(d->type);
-    if (kind == shale::MemKind::kMmio || kind == shale::MemKind::kReserved) continue;
-    uint64_t end = d->physical_start + d->number_of_pages * shale::kPageSize;
+    os::MemKind kind = classify(d->type);
+    if (kind == os::MemKind::kMmio || kind == os::MemKind::kReserved) continue;
+    uint64_t end = d->physical_start + d->number_of_pages * os::kPageSize;
     if (end > top) top = end;
   }
   return (top + kGiB - 1) & ~(kGiB - 1);
@@ -262,7 +262,7 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
   g_st = st;
   g_bs = st->boot_services;
   g_bs->set_watchdog_timer(0, 0, 0, nullptr);
-  print("shale-boot: loader started\n");
+  print("loader: loader started\n");
 
   LoadedImage* loaded = nullptr;
   check(g_bs->handle_protocol(image, &kLoadedImageGuid, reinterpret_cast<void**>(&loaded)), "LoadedImage");
@@ -275,25 +275,25 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
   FileData kernel_file;
   if (!read_file(root, u"\\kernel.elf", kLoaderData, &kernel_file)) fail("\\kernel.elf not found", kNotFound);
   KernelImage kernel = load_kernel(kernel_file);
-  print("shale-boot: kernel ");
+  print("loader: kernel ");
   print_dec(kernel.pages * 4);
   print(" KiB at phys ");
   print_hex(kernel.phys);
   print("\n");
 
-  auto* bi = reinterpret_cast<shale::BootInfo*>(alloc_pages(1, shale::kEfiMemBootData));
-  bi->magic = shale::kBootInfoMagic;
+  auto* bi = reinterpret_cast<os::BootInfo*>(alloc_pages(1, os::kEfiMemBootData));
+  bi->magic = os::kBootInfoMagic;
   bi->kernel_phys = kernel.phys;
   bi->kernel_virt = kernel.virt;
   bi->kernel_pages = kernel.pages;
-  bi->hhdm_base = shale::kHhdmBase;
+  bi->hhdm_base = os::kHhdmBase;
   bi->tsc_loader_entry = tsc_entry;
 
   FileData initrd;
-  if (read_file(root, u"\\initrd.tar", shale::kEfiMemInitrd, &initrd)) {
+  if (read_file(root, u"\\initrd.tar", os::kEfiMemInitrd, &initrd)) {
     bi->initrd_phys = reinterpret_cast<uint64_t>(initrd.data);
     bi->initrd_size = initrd.size;
-    print("shale-boot: initrd ");
+    print("loader: initrd ");
     print_dec(initrd.size);
     print(" bytes\n");
   }
@@ -326,9 +326,9 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
     bi->fb.width = info->horizontal_resolution;
     bi->fb.height = info->vertical_resolution;
     bi->fb.pixels_per_line = info->pixels_per_scan_line;
-    bi->fb.format = info->pixel_format == kPixelRgbx8   ? shale::PixelFormat::kRgbx
-                    : info->pixel_format == kPixelBgrx8 ? shale::PixelFormat::kBgrx
-                                                        : shale::PixelFormat::kOther;
+    bi->fb.format = info->pixel_format == kPixelRgbx8   ? os::PixelFormat::kRgbx
+                    : info->pixel_format == kPixelBgrx8 ? os::PixelFormat::kBgrx
+                                                        : os::PixelFormat::kOther;
   }
 
   // Size the memory map, then allocate the buffers the final map and region
@@ -338,10 +338,10 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
   Status s = g_bs->get_memory_map(&map_size, nullptr, &map_key, &desc_size, &desc_version);
   if (s != kBufferTooSmall) fail("GetMemoryMap(size)", s);
   UINTN map_capacity = map_size + 64 * desc_size;
-  uint64_t map_pages = (map_capacity + shale::kPageSize - 1) / shale::kPageSize;
-  auto* map = reinterpret_cast<uint8_t*>(alloc_pages(map_pages, shale::kEfiMemBootData));
-  uint64_t region_pages = (map_capacity / desc_size * sizeof(shale::MemRegion)) / shale::kPageSize + 1;
-  auto* regions = reinterpret_cast<shale::MemRegion*>(alloc_pages(region_pages, shale::kEfiMemBootData));
+  uint64_t map_pages = (map_capacity + os::kPageSize - 1) / os::kPageSize;
+  auto* map = reinterpret_cast<uint8_t*>(alloc_pages(map_pages, os::kEfiMemBootData));
+  uint64_t region_pages = (map_capacity / desc_size * sizeof(os::MemRegion)) / os::kPageSize + 1;
+  auto* regions = reinterpret_cast<os::MemRegion*>(alloc_pages(region_pages, os::kEfiMemBootData));
 
   map_size = map_capacity;
   check(g_bs->get_memory_map(&map_size, reinterpret_cast<MemoryDescriptor*>(map), &map_key, &desc_size,
@@ -351,7 +351,7 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
   bool nx = cpu_has_nx();
   uint64_t* pml4 = build_page_tables(kernel, kernel_file.data, bi->direct_map_top, nx);
   bi->loader_pml4_phys = reinterpret_cast<uint64_t>(pml4);
-  print("shale-boot: direct map ");
+  print("loader: direct map ");
   print_dec(bi->direct_map_top / kGiB);
   print(" GiB, exiting boot services\n");
 
@@ -371,9 +371,9 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
   uint64_t count = 0;
   for (UINTN i = 0; i < map_size / desc_size; i++) {
     const auto* d = desc_at(map, desc_size, i);
-    shale::MemKind kind = classify(d->type);
+    os::MemKind kind = classify(d->type);
     if (count && regions[count - 1].kind == kind &&
-        regions[count - 1].base + regions[count - 1].pages * shale::kPageSize == d->physical_start) {
+        regions[count - 1].base + regions[count - 1].pages * os::kPageSize == d->physical_start) {
       regions[count - 1].pages += d->number_of_pages;
       continue;
     }
@@ -389,7 +389,7 @@ extern "C" Status efi_main(Handle image, SystemTable* st) {
     asm volatile("wrmsr" ::"c"(kMsrEfer), "a"(static_cast<uint32_t>(efer)), "d"(static_cast<uint32_t>(efer >> 32)));
   }
   bi->tsc_kernel_jump = rdtsc();
-  uint64_t bi_virt = reinterpret_cast<uint64_t>(bi) + shale::kHhdmBase;
+  uint64_t bi_virt = reinterpret_cast<uint64_t>(bi) + os::kHhdmBase;
   asm volatile(
       "cli\n\t"
       "mov %0, %%cr3\n\t"

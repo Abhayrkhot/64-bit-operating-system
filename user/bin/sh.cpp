@@ -1,5 +1,5 @@
 // A small interactive shell on the serial console.
-#include "shale.hpp"
+#include "libc.hpp"
 
 namespace {
 
@@ -91,11 +91,11 @@ void help() {
 }  // namespace
 
 int main(int, char**) {
-  printf("\nShale shell. Type 'help'.\n");
+  printf("\nShell ready. Type 'help'.\n");
   char line[256];
   char* argv[33];
   for (;;) {
-    printf("shale:%s$ ", g_cwd);
+    printf("%s$ ", g_cwd);
     if (read_command(line, sizeof(line)) < 0) return 0;
     // echo redirection: split off "> file" / ">> file" first.
     char* redirect = strchr(line, '>');

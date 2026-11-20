@@ -5,37 +5,37 @@
 
 namespace boot {
 namespace {
-shale::BootInfo g_info;
+os::BootInfo g_info;
 constexpr uint64_t kMaxRegions = 512;
-shale::MemRegion g_regions[kMaxRegions];
+os::MemRegion g_regions[kMaxRegions];
 uint64_t g_region_count;
 }  // namespace
 
-void init(const shale::BootInfo* loader_info) {
-  if (loader_info->magic != shale::kBootInfoMagic) panic("bad boot info magic %lx", loader_info->magic);
+void init(const os::BootInfo* loader_info) {
+  if (loader_info->magic != os::kBootInfoMagic) panic("bad boot info magic %lx", loader_info->magic);
   g_info = *loader_info;
   if (g_info.region_count > kMaxRegions) panic("too many memory regions: %lu", g_info.region_count);
-  memcpy(g_regions, phys_to_virt(g_info.regions_phys), g_info.region_count * sizeof(shale::MemRegion));
+  memcpy(g_regions, phys_to_virt(g_info.regions_phys), g_info.region_count * sizeof(os::MemRegion));
   g_region_count = g_info.region_count;
   g_info.cmdline[sizeof(g_info.cmdline) - 1] = 0;
 }
 
-const shale::BootInfo& info() { return g_info; }
-const shale::MemRegion* regions() { return g_regions; }
+const os::BootInfo& info() { return g_info; }
+const os::MemRegion* regions() { return g_regions; }
 uint64_t region_count() { return g_region_count; }
 
-const char* kind_name(shale::MemKind kind) {
+const char* kind_name(os::MemKind kind) {
   switch (kind) {
-    case shale::MemKind::kUsable: return "usable";
-    case shale::MemKind::kLoaderReclaimable: return "loader-reclaimable";
-    case shale::MemKind::kKernel: return "kernel";
-    case shale::MemKind::kBootData: return "boot-data";
-    case shale::MemKind::kInitrd: return "initrd";
-    case shale::MemKind::kAcpiReclaimable: return "acpi-reclaimable";
-    case shale::MemKind::kAcpiNvs: return "acpi-nvs";
-    case shale::MemKind::kMmio: return "mmio";
-    case shale::MemKind::kRuntimeServices: return "uefi-runtime";
-    case shale::MemKind::kReserved: return "reserved";
+    case os::MemKind::kUsable: return "usable";
+    case os::MemKind::kLoaderReclaimable: return "loader-reclaimable";
+    case os::MemKind::kKernel: return "kernel";
+    case os::MemKind::kBootData: return "boot-data";
+    case os::MemKind::kInitrd: return "initrd";
+    case os::MemKind::kAcpiReclaimable: return "acpi-reclaimable";
+    case os::MemKind::kAcpiNvs: return "acpi-nvs";
+    case os::MemKind::kMmio: return "mmio";
+    case os::MemKind::kRuntimeServices: return "uefi-runtime";
+    case os::MemKind::kReserved: return "reserved";
   }
   return "?";
 }

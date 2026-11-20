@@ -6,7 +6,7 @@
 #include "mm/pmm.hpp"
 
 namespace {
-shale::mm::Heap g_heap;
+os::mm::Heap g_heap;
 }
 
 void kheap_init() { g_heap.init(&pmm::buddy(), phys_to_virt<uint8_t>(0)); }
@@ -46,12 +46,12 @@ size_t kmalloc_usable_size(const void* p) {
   return g_heap.usable_size(p);
 }
 
-shale::mm::Heap::Stats kheap_stats() {
+os::mm::Heap::Stats kheap_stats() {
   LockGuard guard(pmm::lock());
   return g_heap.stats();
 }
 
-shale::mm::Heap::ClassStats kheap_class_stats(unsigned index) {
+os::mm::Heap::ClassStats kheap_class_stats(unsigned index) {
   LockGuard guard(pmm::lock());
   return g_heap.class_stats(index);
 }

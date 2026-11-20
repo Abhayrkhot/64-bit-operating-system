@@ -1,5 +1,5 @@
 // File-system system calls from user space: semantics and error cases.
-#include "shale.hpp"
+#include "libc.hpp"
 
 namespace {
 int g_failures;
@@ -20,14 +20,14 @@ int write_all(const char* path, const void* data, uint64_t n, uint64_t flags = 0
 }
 
 void basic() {
-  CHECK(write_all("/note.txt", "hello shalefs\n", 14) == 0);
+  CHECK(write_all("/note.txt", "hello journal\n", 14) == 0);
   int fd = open("/note.txt", sys::kOReadWrite);
   CHECK(fd >= 0);
   char buf[64] = {};
   CHECK(read(fd, buf, sizeof(buf)) == 14);
-  CHECK(!memcmp(buf, "hello shalefs\n", 14));
+  CHECK(!memcmp(buf, "hello journal\n", 14));
   CHECK(lseek(fd, 6, sys::kSeekSet) == 6);
-  CHECK(write(fd, "SHALE", 5) == 5);
+  CHECK(write(fd, "JOURN", 5) == 5);
   CHECK(lseek(fd, 0, sys::kSeekEnd) == 14);
   CHECK(lseek(fd, -20, sys::kSeekCur) == -sys::kEINVAL);
   close(fd);
@@ -39,7 +39,7 @@ void basic() {
   CHECK(stat("/note.txt", &st) == 0 && st.size == 19 && st.type == sys::kTypeFile);
   fd = open("/note.txt", 0);
   read(fd, buf, sizeof(buf));
-  CHECK(!memcmp(buf, "hello SHALEfs\nmore\n", 19));
+  CHECK(!memcmp(buf, "hello JOURNal\nmore\n", 19));
   close(fd);
   CHECK(truncate("/note.txt", 5) == 0);
   CHECK(stat("/note.txt", &st) == 0 && st.size == 5);
@@ -104,7 +104,7 @@ void big_file() {
 }
 
 void exec_from_disk() {
-  // Copy a program out of the initrd onto ShaleFS and run it from there.
+  // Copy a program out of the initrd onto the disk file system and run it from there.
   int in = open("/bin/hello", 0);
   sys::Stat st;
   stat("/bin/hello", &st);

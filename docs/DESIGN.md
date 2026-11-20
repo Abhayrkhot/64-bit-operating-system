@@ -1,4 +1,4 @@
-# Shale design
+# Design
 
 This document describes how each part works and which invariant it maintains.
 Measured numbers are in [RESULTS.md](RESULTS.md).
@@ -22,11 +22,11 @@ gnu-efi, no third-party bootloader.
      with the segment permissions (`NX` only after `EFER.NXE` is set).
 4. `GetMemoryMap` → `ExitBootServices` (retrying without allocating), convert
    the map into a compact region table, load `CR3`, and jump to the kernel
-   with a `BootInfo` pointer (`include/shale/bootinfo.hpp`).
+   with a `BootInfo` pointer (`include/abi/bootinfo.hpp`).
 
 The kernel copies `BootInfo` and builds its own tables, which drop the
 identity map so null and low addresses fault. QEMU passes the command line
-through `fw_cfg` (`opt/shale/cmdline`), so tests don't need to rebuild the ESP
+through `fw_cfg` (`opt/os/cmdline`), so tests don't need to rebuild the ESP
 image.
 
 ## Memory
@@ -97,7 +97,7 @@ tables.
 ## Processes and system calls
 
 **Programs.** User programs are static ELF files in the initrd (`/bin`) or on
-ShaleFS. `lib/elf/validate.cpp` checks every executable before mapping
+the disk file system. `lib/elf/validate.cpp` checks every executable before mapping
 (overflow-checked arithmetic throughout):
 - file ranges inside the file;
 - segments inside the user range;
@@ -141,7 +141,7 @@ user pointers.
 `wait` reaps children. Orphans are reparented to a kernel pseudo-process and
 reaped automatically.
 
-## ShaleFS
+## File system
 
 The on-disk format is in `lib/fs/format.hpp`. The file system (`lib/fs`) is
 portable C++ shared by the kernel and the host tools.
@@ -204,7 +204,7 @@ a half-written transaction left in the log can never look current.
 
 ### Checking
 
-`lib/fs/fsck.cpp` is independent of `shalefs.cpp`: it shares only the format
+`lib/fs/fsck.cpp` is independent of `filesystem.cpp`: it shares only the format
 header. It checks:
 - bitmaps against actual use (inode bits vs. inode types; every data block
   referenced exactly once, and allocated iff referenced);
@@ -246,7 +246,7 @@ next boot, and the host checks fsck and fsstress's durability log.
 
 | Layer | What runs | Where |
 |---|---|---|
-| Host unit tests | buddy and slab against shadow models, ELF validator rules, ShaleFS semantics and model-checked random workloads | `make htest` |
+| Host unit tests | buddy and slab against shadow models, ELF validator rules, file-system semantics and model-checked random workloads | `make htest` |
 | In-kernel tests | 34 `KTEST`s: boot, allocators, W^X probes, scheduler, user processes, faults, isolation, syscall fuzzing with leak checks, file system | `make ktest` (KVM and TCG) |
 | Fuzzing | libFuzzer + ASan/UBSan on the ELF validator; `sysfuzz` hammers every syscall from ring 3 | `make fuzz-elf`, `KTEST user_syscall_fuzz…` |
 | Crash consistency | crashsim (states + controls), QEMU kill test | `tools/campaigns.sh` |

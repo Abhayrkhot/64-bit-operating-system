@@ -1,6 +1,6 @@
 #include "mm/buddy.hpp"
 
-namespace shale::mm {
+namespace os::mm {
 
 void BuddyAllocator::init(FrameMeta* meta, uint32_t frame_count) {
   meta_ = meta;
@@ -174,4 +174,4 @@ bool BuddyAllocator::check_invariants() const {
   return total == free_frames_;
 }
 
-}  // namespace shale::mm
+}  // namespace os::mm

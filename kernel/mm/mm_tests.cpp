@@ -55,7 +55,7 @@ KTEST(pmm_blocks_are_aligned_and_coalesce) {
 }
 
 KTEST(pmm_random_churn_keeps_invariants) {
-  shale::Random rng(42);
+  os::Random rng(42);
   struct Block {
     uint64_t phys;
     unsigned order;
@@ -180,14 +180,14 @@ KTEST(heap_size_classes_and_large) {
 }
 
 KTEST(heap_random_stress_and_return_to_baseline) {
-  shale::Random rng(7);
+  os::Random rng(7);
   constexpr int kSlots = 2048;
   static uint8_t* ptrs[kSlots];
   static uint32_t sizes[kSlots];
   // Other subsystems (the mounted file system, processes) legitimately hold
   // heap objects, so compare against a snapshot rather than zero.
-  uint64_t live_before[shale::mm::Heap::kNumClasses];
-  for (unsigned c = 0; c < shale::mm::Heap::kNumClasses; c++) live_before[c] = kheap_class_stats(c).live_objects;
+  uint64_t live_before[os::mm::Heap::kNumClasses];
+  for (unsigned c = 0; c < os::mm::Heap::kNumClasses; c++) live_before[c] = kheap_class_stats(c).live_objects;
   uint64_t large_before = kheap_stats().large_frames;
   for (int step = 0; step < 200000; step++) {
     int i = static_cast<int>(rng.below(kSlots));
@@ -210,7 +210,7 @@ KTEST(heap_random_stress_and_return_to_baseline) {
     ptrs[i] = nullptr;
   }
   KEXPECT(kheap_check());
-  for (unsigned c = 0; c < shale::mm::Heap::kNumClasses; c++)
+  for (unsigned c = 0; c < os::mm::Heap::kNumClasses; c++)
     KEXPECT_EQ(kheap_class_stats(c).live_objects, live_before[c]);
   KEXPECT_EQ(kheap_stats().large_frames, large_before);
 }

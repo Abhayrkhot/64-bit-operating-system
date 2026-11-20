@@ -4,7 +4,7 @@
 //   process_switch     two processes ping-pong with sys_yield: each switch
 //                      is syscall entry + scheduler + CR3 switch + FXSAVE /
 //                      FXRSTOR + sysret. One sample = round trip / 2.
-#include "shale.hpp"
+#include "libc.hpp"
 #include "util/sort.hpp"
 
 namespace {
@@ -12,7 +12,7 @@ namespace {
 uint64_t g_tsc_hz;
 
 void report(const char* bench, const char* metric, uint64_t* cycles, uint64_t n, uint64_t divisor) {
-  shale::heap_sort(cycles, n);
+  os::heap_sort(cycles, n);
   auto ns10 = [](uint64_t c, uint64_t div) {
     return static_cast<uint64_t>(static_cast<unsigned __int128>(c) * 10000000000ull / (g_tsc_hz * div));
   };

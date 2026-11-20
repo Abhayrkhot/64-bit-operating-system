@@ -1,6 +1,6 @@
 // QEMU fw_cfg (I/O port interface). Used to pass the kernel command line from
 // the test runner without rebuilding the ESP image:
-//   qemu ... -fw_cfg name=opt/shale/cmdline,string="test=all"
+//   qemu ... -fw_cfg name=opt/os/cmdline,string="test=all"
 #pragma once
 
 #include <stddef.h>

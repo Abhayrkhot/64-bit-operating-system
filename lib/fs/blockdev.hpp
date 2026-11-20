@@ -1,4 +1,4 @@
-// Block device interface (4 KiB blocks) used by ShaleFS. The kernel backs it
+// Block device interface (4 KiB blocks) used by the file system. The kernel backs it
 // with virtio-blk; host tools with files, memory, or a recording device that
 // logs writes and flush barriers for crash simulation.
 //
@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-namespace shale::fs {
+namespace os::fs {
 
 class BlockDevice {
  public:
@@ -30,4 +30,4 @@ class BlockDevice {
   }
 };
 
-}  // namespace shale::fs
+}  // namespace os::fs

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runs Shale's benchmarks several times and prints the median of each metric.
+"""Runs the kernel's benchmarks several times and prints the median of each metric.
 
     tools/bench.py --runs 5 --out build/results/bench.md
 

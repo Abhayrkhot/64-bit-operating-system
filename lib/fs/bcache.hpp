@@ -10,7 +10,7 @@
 #include "fs/blockdev.hpp"
 #include "fs/format.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 
 struct Buffer {
   uint32_t block;
@@ -75,4 +75,4 @@ class BufferCache {
   Stats stats_{};
 };
 
-}  // namespace shale::fs
+}  // namespace os::fs

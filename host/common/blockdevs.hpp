@@ -1,4 +1,4 @@
-// Host block devices for ShaleFS tools and tests.
+// Host block devices for file-system tools and tests.
 #pragma once
 
 #include <cstdint>
@@ -13,10 +13,10 @@
 
 namespace host {
 
-using shale::fs::kBlockSize;
+using os::fs::kBlockSize;
 
 // A raw image file (pread/pwrite, fdatasync on flush).
-class FileDevice : public shale::fs::BlockDevice {
+class FileDevice : public os::fs::BlockDevice {
  public:
   ~FileDevice() override;
   int open(const std::string& path, bool create, uint64_t bytes = 0);
@@ -30,7 +30,7 @@ class FileDevice : public shale::fs::BlockDevice {
   uint32_t blocks_ = 0;
 };
 
-class MemDevice : public shale::fs::BlockDevice {
+class MemDevice : public os::fs::BlockDevice {
  public:
   explicit MemDevice(uint32_t blocks) : data_(static_cast<size_t>(blocks) * kBlockSize, 0), blocks_(blocks) {}
   uint32_t block_count() const override { return blocks_; }
@@ -47,14 +47,14 @@ class MemDevice : public shale::fs::BlockDevice {
 
 // Forwards to an inner device and logs every block write and flush in issue
 // order, which is what the crash simulator replays.
-class RecordingDevice : public shale::fs::BlockDevice {
+class RecordingDevice : public os::fs::BlockDevice {
  public:
   struct Event {
     bool flush;
     uint32_t block;
     uint32_t data;  // index into payloads()
   };
-  explicit RecordingDevice(shale::fs::BlockDevice* inner) : inner_(inner) {}
+  explicit RecordingDevice(os::fs::BlockDevice* inner) : inner_(inner) {}
   uint32_t block_count() const override { return inner_->block_count(); }
   int read(uint32_t block, uint32_t count, void* buf) override { return inner_->read(block, count, buf); }
   int write(uint32_t block, uint32_t count, const void* buf) override;
@@ -64,14 +64,14 @@ class RecordingDevice : public shale::fs::BlockDevice {
   size_t position() const { return events_.size(); }
 
  private:
-  shale::fs::BlockDevice* inner_;
+  os::fs::BlockDevice* inner_;
   std::vector<Event> events_;
   std::vector<uint8_t> payloads_;
 };
 
 // Copy-on-write view over a base image: crash states are a few hundred
 // blocks on top of the image the workload started from.
-class OverlayDevice : public shale::fs::BlockDevice {
+class OverlayDevice : public os::fs::BlockDevice {
  public:
   explicit OverlayDevice(const MemDevice* base) : base_(base) {}
   uint32_t block_count() const override { return base_->block_count(); }

@@ -1,4 +1,4 @@
-# Toolchain for Shale: clang/lld for the UEFI loader (PE/COFF), the kernel
+# Toolchain for the OS: clang/lld for the UEFI loader (PE/COFF), the kernel
 # (ELF, freestanding) and host tools; QEMU + OVMF for boot tests.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive

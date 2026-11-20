@@ -1,7 +1,7 @@
 // Deliberately misbehaves in one way (argv[1]); the kernel must kill only this
 // process. Exits 0 only if the misbehaviour unexpectedly succeeded... which is
 // a failure the test reports.
-#include "shale.hpp"
+#include "libc.hpp"
 
 namespace {
 volatile uint64_t g_sink;

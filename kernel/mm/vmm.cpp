@@ -194,7 +194,7 @@ void init() {
   uint64_t top = boot::info().direct_map_top;
   uint64_t direct_flags = kPresent | kWritable | kHuge | global | nx;
   for (uint64_t pa = 0; pa < top; pa += 1ull << 30) {
-    uint64_t va = shale::kHhdmBase + pa;
+    uint64_t va = os::kHhdmBase + pa;
     uint64_t* l3 = table(l4[index(va, 3)]);
     if (g_features.gbpages) {
       l3[index(va, 2)] = pa | direct_flags;
@@ -217,7 +217,7 @@ void init() {
       {__rodata_start, __rodata_end, kPresent | global | nx},
       {__data_start, __kernel_end, kPresent | kWritable | global | nx},
   };
-  const shale::BootInfo& bi = boot::info();
+  const os::BootInfo& bi = boot::info();
   for (const Range& r : ranges) {
     for (uint64_t va = reinterpret_cast<uint64_t>(r.start); va < reinterpret_cast<uint64_t>(r.end); va += kPage) {
       if (!g_kernel.map(va, bi.kernel_phys + (va - bi.kernel_virt), r.flags))

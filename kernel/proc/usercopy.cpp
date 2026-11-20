@@ -1,6 +1,6 @@
 #include "proc/usercopy.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "mm/vmm.hpp"
 
@@ -29,25 +29,25 @@ bool range_ok(uint64_t addr, uint64_t n) {
 }
 
 int64_t from_user(void* dst, uint64_t src, uint64_t n) {
-  if (!range_ok(src, n)) return -shale::sys::kEFAULT;
+  if (!range_ok(src, n)) return -os::sys::kEFAULT;
   if (n == 0) return 0;
   return g_copy(dst, reinterpret_cast<const void*>(src), n);
 }
 
 int64_t to_user(uint64_t dst, const void* src, uint64_t n) {
-  if (!range_ok(dst, n)) return -shale::sys::kEFAULT;
+  if (!range_ok(dst, n)) return -os::sys::kEFAULT;
   if (n == 0) return 0;
   return g_copy(reinterpret_cast<void*>(dst), src, n);
 }
 
 int64_t strncpy_from_user(char* dst, uint64_t src, uint64_t max) {
-  if (max == 0) return -shale::sys::kENAMETOOLONG;
+  if (max == 0) return -os::sys::kENAMETOOLONG;
   // Clamp the scan to the user half so it can never walk into kernel memory.
-  if (src >= vmm::kUserEnd) return -shale::sys::kEFAULT;
+  if (src >= vmm::kUserEnd) return -os::sys::kEFAULT;
   uint64_t limit = vmm::kUserEnd - src < max ? vmm::kUserEnd - src : max;
   int64_t n = g_strncpy(dst, reinterpret_cast<const char*>(src), limit);
-  if (n == -shale::sys::kENAMETOOLONG && limit < max) return -shale::sys::kEFAULT;
-  if (n >= 0 && static_cast<uint64_t>(n) >= max) return -shale::sys::kENAMETOOLONG;
+  if (n == -os::sys::kENAMETOOLONG && limit < max) return -os::sys::kEFAULT;
+  if (n >= 0 && static_cast<uint64_t>(n) >= max) return -os::sys::kENAMETOOLONG;
   return n;
 }
 

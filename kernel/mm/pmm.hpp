@@ -24,7 +24,7 @@ uint64_t managed_bytes();
 uint64_t metadata_bytes();
 
 // The heap shares the allocator and its lock.
-shale::mm::BuddyAllocator& buddy();
+os::mm::BuddyAllocator& buddy();
 SpinLock& lock();
 
 }  // namespace pmm

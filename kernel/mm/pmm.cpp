@@ -7,10 +7,10 @@
 namespace pmm {
 namespace {
 
-using shale::MemKind;
-using shale::mm::BuddyAllocator;
+using os::MemKind;
+using os::mm::BuddyAllocator;
 
-constexpr uint64_t kFrame = shale::kPageSize;
+constexpr uint64_t kFrame = os::kPageSize;
 constexpr uint64_t kLowReserve = 1ull << 20;  // keep the first MiB (real-mode leftovers, SMP trampoline)
 
 BuddyAllocator g_buddy;
@@ -39,7 +39,7 @@ void add_range(uint64_t base, uint64_t end) {
     if (e <= b) return;
     g_buddy.add_free_range(static_cast<uint32_t>(b / kFrame), static_cast<uint32_t>((e - b) / kFrame));
   };
-  uint64_t mb = g_meta_phys, me = g_meta_phys + shale::align_up(g_meta_bytes, kFrame);
+  uint64_t mb = g_meta_phys, me = g_meta_phys + os::align_up(g_meta_bytes, kFrame);
   if (end <= mb || base >= me) {
     add(base, end);
   } else {
@@ -53,26 +53,26 @@ void add_range(uint64_t base, uint64_t end) {
 void init() {
   uint64_t top = 0;
   for (uint64_t i = 0; i < boot::region_count(); i++) {
-    const shale::MemRegion& r = boot::regions()[i];
-    if (is_ram(r.kind)) top = shale::max(top, r.base + r.pages * kFrame);
+    const os::MemRegion& r = boot::regions()[i];
+    if (is_ram(r.kind)) top = os::max(top, r.base + r.pages * kFrame);
   }
   uint64_t frames = top / kFrame;
   if (frames > 0xFFFFFFF0ull) panic("pmm: %lu frames exceeds 32-bit frame index", frames);
-  g_meta_bytes = frames * sizeof(shale::mm::FrameMeta);
-  uint64_t meta_pages = shale::align_up(g_meta_bytes, kFrame) / kFrame;
+  g_meta_bytes = frames * sizeof(os::mm::FrameMeta);
+  uint64_t meta_pages = os::align_up(g_meta_bytes, kFrame) / kFrame;
 
   // Metadata goes at the start of the first usable region above 1 MiB that fits.
   for (uint64_t i = 0; i < boot::region_count() && !g_meta_phys; i++) {
-    const shale::MemRegion& r = boot::regions()[i];
-    uint64_t base = shale::max(r.base, kLowReserve);
+    const os::MemRegion& r = boot::regions()[i];
+    uint64_t base = os::max(r.base, kLowReserve);
     uint64_t end = r.base + r.pages * kFrame;
     if (r.kind == MemKind::kUsable && end > base && (end - base) / kFrame >= meta_pages) g_meta_phys = base;
   }
   if (!g_meta_phys) panic("pmm: no room for %lu KiB of frame metadata", g_meta_bytes / 1024);
 
-  g_buddy.init(phys_to_virt<shale::mm::FrameMeta>(g_meta_phys), static_cast<uint32_t>(frames));
+  g_buddy.init(phys_to_virt<os::mm::FrameMeta>(g_meta_phys), static_cast<uint32_t>(frames));
   for (uint64_t i = 0; i < boot::region_count(); i++) {
-    const shale::MemRegion& r = boot::regions()[i];
+    const os::MemRegion& r = boot::regions()[i];
     if (r.kind == MemKind::kUsable) add_range(r.base, r.base + r.pages * kFrame);
   }
   kprintf("pmm: %lu frames (%lu MiB of RAM), %lu MiB free, metadata %lu KiB at %lx\n", frames, top >> 20,
@@ -85,7 +85,7 @@ void reclaim_boot_memory() {
   g_reclaimed = true;
   uint64_t before = g_buddy.free_frames();
   for (uint64_t i = 0; i < boot::region_count(); i++) {
-    const shale::MemRegion& r = boot::regions()[i];
+    const os::MemRegion& r = boot::regions()[i];
     if (r.kind == MemKind::kLoaderReclaimable || r.kind == MemKind::kBootData)
       add_range(r.base, r.base + r.pages * kFrame);
   }
@@ -113,7 +113,7 @@ void free(uint64_t phys, unsigned order) {
 uint64_t free_bytes() { return g_buddy.free_frames() * kFrame; }
 uint64_t managed_bytes() { return g_buddy.managed_frames() * kFrame; }
 uint64_t metadata_bytes() { return g_meta_bytes; }
-shale::mm::BuddyAllocator& buddy() { return g_buddy; }
+os::mm::BuddyAllocator& buddy() { return g_buddy; }
 SpinLock& lock() { return g_lock; }
 
 }  // namespace pmm

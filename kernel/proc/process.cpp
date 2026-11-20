@@ -1,6 +1,6 @@
 #include "proc/process.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "arch/x86_64/cpu.hpp"
 #include "arch/x86_64/fpu.hpp"
@@ -20,7 +20,7 @@ extern "C" [[noreturn]] void enter_user(uint64_t rip, uint64_t rsp, uint64_t arg
 namespace process {
 namespace {
 
-using namespace shale::sys;
+using namespace os::sys;
 constexpr uint64_t kPage = 4096;
 constexpr uint64_t kProgramLo = 0x10000;              // keep the first 64 KiB unmapped
 constexpr uint64_t kProgramHi = 0x0000010000000000ull;  // programs + brk live below 1 TiB
@@ -84,21 +84,21 @@ bool map_zeroed(vmm::AddressSpace* as, uint64_t va, uint64_t flags, uint64_t* fr
 }
 
 int load_image(Process* p, const uint8_t* data, uint64_t size) {
-  shale::elf::Image img;
-  shale::elf::Error err = shale::elf::validate(data, size, kProgramLo, kProgramHi, &img);
-  if (err != shale::elf::Error::kOk) {
-    kprintf("exec %s: %s\n", p->name, shale::elf::error_name(err));
+  os::elf::Image img;
+  os::elf::Error err = os::elf::validate(data, size, kProgramLo, kProgramHi, &img);
+  if (err != os::elf::Error::kOk) {
+    kprintf("exec %s: %s\n", p->name, os::elf::error_name(err));
     return -kENOEXEC;
   }
   for (unsigned i = 0; i < img.count; i++) {
-    const shale::elf::Segment& s = img.segments[i];
-    uint64_t flags = kUserPage | ((s.flags & shale::elf::kPfW) ? vmm::kWritable : 0) |
-                     ((s.flags & shale::elf::kPfX) ? 0 : vmm::kNoExecute);
-    for (uint64_t va = shale::align_down(s.vaddr, kPage); va < s.vaddr + s.memsz; va += kPage) {
+    const os::elf::Segment& s = img.segments[i];
+    uint64_t flags = kUserPage | ((s.flags & os::elf::kPfW) ? vmm::kWritable : 0) |
+                     ((s.flags & os::elf::kPfX) ? 0 : vmm::kNoExecute);
+    for (uint64_t va = os::align_down(s.vaddr, kPage); va < s.vaddr + s.memsz; va += kPage) {
       uint64_t frame;
       if (!map_zeroed(p->as, va, flags, &frame)) return -kENOMEM;
       // Copy the part of this page that the file backs.
-      uint64_t lo = shale::max(va, s.vaddr), hi = shale::min(va + kPage, s.vaddr + s.filesz);
+      uint64_t lo = os::max(va, s.vaddr), hi = os::min(va + kPage, s.vaddr + s.filesz);
       if (lo < hi) memcpy(phys_to_virt<uint8_t>(frame) + (lo - va), data + s.offset + (lo - s.vaddr), hi - lo);
     }
   }
@@ -199,7 +199,7 @@ int spawn(const char* path, const char* const* argv, Process* parent) {
   const char* base = path;
   for (const char* c = path; *c; c++)
     if (*c == '/') base = c + 1;
-  size_t n = shale::min(strlen(base), sizeof(p->name) - 1);
+  size_t n = os::min(strlen(base), sizeof(p->name) - 1);
   memcpy(p->name, base, n);
   p->mmap_next = kMmapBase;
   p->as = vmm::AddressSpace::create_user();
@@ -345,7 +345,7 @@ int close_fd(Process* p, int fd) {
 
 uint64_t brk(Process* p, uint64_t new_end) {
   if (new_end == 0 || new_end < p->brk_start || new_end - p->brk_start > kBrkMax) return p->brk_end;
-  uint64_t old_top = shale::align_up(p->brk_end, kPage), new_top = shale::align_up(new_end, kPage);
+  uint64_t old_top = os::align_up(p->brk_end, kPage), new_top = os::align_up(new_end, kPage);
   if (new_top > old_top) {
     uint64_t pages = (new_top - old_top) / kPage;
     if (p->pages_mapped + pages > kPageLimit) return p->brk_end;
@@ -366,7 +366,7 @@ uint64_t brk(Process* p, uint64_t new_end) {
 
 int64_t mmap(Process* p, uint64_t length, uint64_t prot) {
   if (length == 0 || length > (1ull << 30) || (prot & ~(kProtRead | kProtWrite))) return -kEINVAL;
-  uint64_t pages = shale::align_up(length, kPage) / kPage;
+  uint64_t pages = os::align_up(length, kPage) / kPage;
   if (p->pages_mapped + pages > kPageLimit) return -kENOMEM;
   MmapRegion* slot = nullptr;
   for (auto& r : p->regions)
@@ -390,7 +390,7 @@ int64_t mmap(Process* p, uint64_t length, uint64_t prot) {
 }
 
 int64_t munmap(Process* p, uint64_t addr, uint64_t length) {
-  uint64_t pages = shale::align_up(length, kPage) / kPage;
+  uint64_t pages = os::align_up(length, kPage) / kPage;
   for (auto& r : p->regions) {
     if (r.pages && r.start == addr && r.pages == pages) {
       for (uint64_t i = 0; i < pages; i++) p->as->unmap(addr + i * kPage);

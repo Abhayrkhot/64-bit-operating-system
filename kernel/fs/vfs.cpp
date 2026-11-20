@@ -13,16 +13,16 @@
 namespace vfs {
 namespace {
 
-using namespace shale::sys;
-using shale::fs::InodeInfo;
-using shale::fs::InodeType;
-using shale::fs::ShaleFs;
+using namespace os::sys;
+using os::fs::InodeInfo;
+using os::fs::InodeType;
+using os::fs::FileSystem;
 
 constexpr uint64_t kMaxExecutable = 16ull << 20;
 constexpr uint64_t kCommitIntervalMs = 1000;
 
-shale::fs::BlockDevice* g_disk;
-ShaleFs* g_fs;
+os::fs::BlockDevice* g_disk;
+FileSystem* g_fs;
 Mutex g_lock;
 
 struct Locked {
@@ -63,7 +63,7 @@ int64_t bin_readdir(File*, uint64_t index, DirEntry* out) {
       *out = {};
       out->type = kTypeFile;
       out->inode = static_cast<uint32_t>(i + 1);
-      size_t n = shale::min(strlen(name + 4), sizeof(out->name) - 1);
+      size_t n = os::min(strlen(name + 4), sizeof(out->name) - 1);
       memcpy(out->name, name + 4, n);
       return 1;
     }
@@ -80,7 +80,7 @@ int64_t dir_read(File*, uint8_t*, uint64_t) { return -kEISDIR; }
 int64_t dir_write(File*, const uint8_t*, uint64_t) { return -kEISDIR; }
 const FileOps kBinDir = {dir_read, dir_write, dir_stat, bin_readdir, nullptr, nullptr, false};
 
-// ---- ShaleFS files: priv2 = inode, priv = generation -------------------------
+// ---- Disk files: priv2 = inode, priv = generation ----------------------------
 
 uint32_t ino_of(File* f) { return static_cast<uint32_t>(f->priv2); }
 bool stale(File* f) { return g_fs->generation(ino_of(f)) != static_cast<uint32_t>(reinterpret_cast<uintptr_t>(f->priv)); }
@@ -127,7 +127,7 @@ int64_t fs_readdir(File* f, uint64_t index, DirEntry* out) {
   Locked l;
   if (stale(f)) return -kENOENT;
   // The root also shows the /bin mount point.
-  if (ino_of(f) == shale::fs::kRootInode) {
+  if (ino_of(f) == os::fs::kRootInode) {
     if (index == 0) {
       *out = {};
       out->type = kTypeDir;
@@ -165,12 +165,12 @@ void commit_thread(void*) {
   }
 }
 
-bool disk_blank(shale::fs::BlockDevice* d) {
-  auto* blk = static_cast<uint8_t*>(kmalloc(shale::fs::kBlockSize));
+bool disk_blank(os::fs::BlockDevice* d) {
+  auto* blk = static_cast<uint8_t*>(kmalloc(os::fs::kBlockSize));
   bool blank = true;
   for (uint32_t b = 0; b < 2 && blank; b++) {
     if (d->read(b, 1, blk) < 0) blank = false;
-    for (uint32_t i = 0; i < shale::fs::kBlockSize && blank; i++) blank = blk[i] == 0;
+    for (uint32_t i = 0; i < os::fs::kBlockSize && blank; i++) blank = blk[i] == 0;
   }
   kfree(blk);
   return blank;
@@ -184,18 +184,18 @@ void init() {
     kprintf("vfs: no disk; / is empty, /bin is the initrd\n");
     return;
   }
-  g_fs = new ShaleFs();
-  ShaleFs::Options o;
+  g_fs = new FileSystem();
+  FileSystem::Options o;
   o.cache_blocks = 2048;  // 8 MiB
   o.max_txn_blocks = 256;
   o.now_ns = now_ns;
   o.log = fs_log;
   int r = g_fs->mount(g_disk, o);
   if (r == -kEINVAL && disk_blank(g_disk)) {
-    ShaleFs::MkfsOptions mo;
+    FileSystem::MkfsOptions mo;
     mo.uuid = arch::rdtsc() ^ 0x5348414c45ull;
-    kprintf("vfs: blank disk, formatting ShaleFS\n");
-    if ((r = ShaleFs::mkfs(g_disk, mo)) == 0) r = g_fs->mount(g_disk, o);
+    kprintf("vfs: blank disk, formatting\n");
+    if ((r = FileSystem::mkfs(g_disk, mo)) == 0) r = g_fs->mount(g_disk, o);
   }
   if (r < 0) {
     kprintf("vfs: mount failed (%d)\n", r);
@@ -205,7 +205,7 @@ void init() {
   }
   const auto& sb = g_fs->superblock();
   const auto& st = g_fs->stats();
-  kprintf("vfs: ShaleFS mounted at / (%u blocks, journal %u, %u free; recovery replayed %lu txns / %lu blocks)\n",
+  kprintf("vfs: file system mounted at / (%u blocks, journal %u, %u free; recovery replayed %lu txns / %lu blocks)\n",
           sb.total_blocks, sb.journal_blocks, g_fs->free_blocks(), st.replayed_txns, st.replayed_blocks);
   sched::spawn("fs-commit", commit_thread, nullptr);
 }
@@ -221,15 +221,15 @@ void shutdown() {
 
 bool root_mounted() { return g_fs != nullptr; }
 
-int check(shale::fs::FsckReport* report) {
+int check(os::fs::FsckReport* report) {
   if (!g_fs || !g_disk) return -kENOENT;
   Locked l;
   int r = g_fs->unmount();
   if (r < 0) return r;
-  r = shale::fs::fsck(g_disk, report);
+  r = os::fs::fsck(g_disk, report);
   delete g_fs;
-  g_fs = new ShaleFs();
-  ShaleFs::Options o;
+  g_fs = new FileSystem();
+  FileSystem::Options o;
   o.cache_blocks = 2048;
   o.max_txn_blocks = 256;
   o.now_ns = now_ns;
@@ -244,8 +244,8 @@ int remount() {
   int r = g_fs->unmount();
   if (r < 0) return r;
   delete g_fs;
-  g_fs = new ShaleFs();
-  ShaleFs::Options o;
+  g_fs = new FileSystem();
+  FileSystem::Options o;
   o.cache_blocks = 2048;
   o.max_txn_blocks = 256;
   o.now_ns = now_ns;
@@ -257,8 +257,8 @@ int remount() {
   }
   return r;
 }
-ShaleFs* fs() { return g_fs; }
-shale::fs::BlockDevice* disk() { return g_disk; }
+FileSystem* fs() { return g_fs; }
+os::fs::BlockDevice* disk() { return g_disk; }
 void lock() { g_lock.lock(); }
 void unlock() { g_lock.unlock(); }
 
@@ -288,7 +288,7 @@ void release_executable(const uint8_t* data) {
   // initrd images live in boot memory; heap copies were made above.
   const auto& bi = boot::info();
   auto p = reinterpret_cast<uint64_t>(data);
-  uint64_t lo = shale::kHhdmBase + bi.initrd_phys, hi = lo + bi.initrd_size;
+  uint64_t lo = os::kHhdmBase + bi.initrd_phys, hi = lo + bi.initrd_size;
   if (p < lo || p >= hi) kfree(const_cast<uint8_t*>(data));
 }
 

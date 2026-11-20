@@ -1,4 +1,4 @@
-// ShaleFS: a small journaling file system (metadata journaling, ordered
+// A small journaling file system (metadata journaling, ordered
 // data). Portable: the kernel mounts it on virtio-blk; host tools (mkfs,
 // fsck, the crash simulator) run the same code on files and recorded devices.
 //
@@ -28,7 +28,7 @@
 #include "fs/format.hpp"
 #include "util/vec.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 
 struct InodeInfo {
   InodeType type;
@@ -38,7 +38,7 @@ struct InodeInfo {
   uint64_t mtime_ns;
 };
 
-class ShaleFs {
+class FileSystem {
  public:
   struct MkfsOptions {
     uint32_t inode_count = 0;     // 0: one per 4 blocks
@@ -61,7 +61,7 @@ class ShaleFs {
     uint64_t replayed_txns, replayed_blocks;
   };
 
-  ~ShaleFs();
+  ~FileSystem();
   static int mkfs(BlockDevice* dev, const MkfsOptions& opts);
   int mount(BlockDevice* dev, const Options& opts);
   int unmount();  // checkpoint and mark clean
@@ -140,4 +140,4 @@ class ShaleFs {
   uint64_t ra_next_ = 0;
 };
 
-}  // namespace shale::fs
+}  // namespace os::fs

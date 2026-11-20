@@ -1,20 +1,23 @@
-# Shale
+# 64-bit Operating System
 
-Shale is an x86-64 kernel written from scratch in C++17 and assembly. It boots
-through its own UEFI loader, which uses no gnu-efi and no third-party
+An x86-64 operating system kernel written from scratch in C++17 and assembly.
+It boots through its own UEFI loader, which uses no gnu-efi and no third-party
 bootloader. It has virtual memory with W^X, a preemptive scheduler, isolated
-ring-3 processes, and ShaleFS, a journaling filesystem crash-tested against
-recorded and torn-write crash states. Shale runs under QEMU with KVM or TCG.
+ring-3 processes, and a journaling file system crash-tested against recorded
+and torn-write crash states. It runs under QEMU with KVM or TCG.
 Every claim below has a test or a benchmark in this repository.
 
 ```
-shale:/$ ls /bin
--      56024  hello
--      84760  fsstress
+Shell ready. Type 'help'.
+/$ ls /bin
+-      84976  fsstress
+-      56256  hello
 ...
-shale:/$ echo hello from shale > /docs/note.txt
-shale:/$ fault null
-pid 3 (fault): page fault at 0000000000000000, rip 00000000004001b2: killed
+/$ echo hello > /docs/note.txt
+/$ cat /docs/note.txt
+hello
+/$ fault null
+pid 2 (fault): page fault at 0000000000000000, rip 00000000004001b2: killed
 [exit 139]
 ```
 
@@ -27,7 +30,7 @@ raw data and caveats are in [docs/RESULTS.md](docs/RESULTS.md).
 |---|---|
 | Crash consistency | **0 failures in 97,074 simulated crash states** (10 seeds; lost, reordered and torn writes; 1.59M journal transactions replayed). **200 of 200 QEMU SIGKILLs** during a file-system workload recovered by journal replay, with fsck clean and every `fsync`ed file intact. |
 | Controls | Without the journal, 56% of the same crash states fail. If recovery skips the commit CRC, 4.6% fail. |
-| Context switch | Voluntary kernel-thread switch: **47 ns** p50 (KVM), 165 ns (TCG). Timer-forced: 1.5 µs end to end, of which Shale's own path is **388 ns**. Process-to-process via syscall + CR3 + FXSAVE: **260 ns**. |
+| Context switch | Voluntary kernel-thread switch: **47 ns** p50 (KVM), 165 ns (TCG). Timer-forced: 1.5 µs end to end, of which the kernel's own path is **388 ns**. Process-to-process via syscall + CR3 + FXSAVE: **260 ns**. |
 | System calls | `getpid` round trip 65 ns (KVM). 600k fuzzed syscalls from ring 3: 0 crashes, 0 leaked bytes. |
 | Page allocator | Buddy leaves 10.8% of free memory unusable for 2 MiB blocks; first-fit leaves 22.4%, so **52% less fragmentation**. |
 | Kernel heap | Typed slab caches: **5.2%** overhead vs 9.4% first-fit and 6.3% best-fit. |
@@ -42,8 +45,8 @@ raw data and caveats are in [docs/RESULTS.md](docs/RESULTS.md).
 | Memory | A buddy allocator over all RAM with exact-size runs. Slab caches (14 size classes plus typed caches). 4-level paging with W^X kernel sections, SMEP/SMAP/UMIP, guard-paged kernel stacks and a shared kernel half for user address spaces. |
 | Scheduling | APIC timer calibrated against the PIT, 1 kHz tick, preemptive round-robin, an assembly context switch, lazy FXSAVE for user threads, sleep, wait queues, mutexes, join. |
 | Processes | ELF loading behind a validator (fuzzed), `syscall`/`sysret` with a canonical-RIP check, 26 system calls, user pointers checked by range, SMAP-bracketed copies and exception-table fixups. Faults kill only the faulting process. |
-| Storage | PCI enumeration, a legacy virtio-blk driver (async bounce-buffered writes, batched doorbell, FLUSH ordering), a VFS with the initrd at `/bin` and ShaleFS at `/`. |
-| ShaleFS | Inodes with direct/indirect/double-indirect blocks, bitmaps, directories. Metadata journaling in ordered mode with CRC32C-checksummed commits, alternating superblocks, deferred block reuse, read-ahead and an independent fsck. |
+| Storage | PCI enumeration, a legacy virtio-blk driver (async bounce-buffered writes, batched doorbell, FLUSH ordering), a VFS with the initrd at `/bin` and the journaling file system at `/`. |
+| File system | Inodes with direct/indirect/double-indirect blocks, bitmaps, directories. Metadata journaling in ordered mode with CRC32C-checksummed commits, alternating superblocks, deferred block reuse, read-ahead and an independent fsck. |
 | User space | crt0 + a small libc, a shell, and test, stress, fuzz and benchmark programs. |
 
 How each part works, and which invariant it maintains: [docs/DESIGN.md](docs/DESIGN.md).
@@ -81,12 +84,12 @@ pass/fail/panic. Boot modes: `test=<prefix|all>`, `bench=<name>`,
 
 ```
 boot/            UEFI loader
-include/shale/   boot protocol, ELF and syscall ABI shared by loader, kernel, user space
+include/abi/     boot protocol, ELF and syscall ABI shared by loader, kernel, user space
 kernel/          arch/x86_64, mm, sched, proc, fs, drivers, bench, test
 lib/             portable code built into both the kernel and host tools:
-                 mm (buddy, slab), fs (ShaleFS, fsck), elf (validator), fmt, util
+                 mm (buddy, slab), fs (file system, fsck), elf (validator), fmt, util
 user/            libc and programs (sh, fstest, fsstress, sysfuzz, usertest, ...)
-host/            unit tests, fuzz harness, tools: crashsim, fragbench, shalefs
+host/            unit tests, fuzz harness, tools: crashsim, fragbench, fstool
 tools/           QEMU runner, crash test, benchmark and campaign drivers
 docs/            DESIGN.md, RESULTS.md
 ```
@@ -98,6 +101,6 @@ docs/            DESIGN.md, RESULTS.md
 - Processes are single-threaded. There is no `fork`; processes are created
   with `spawn`.
 - There are no signals beyond fault kills and `kill` of a child.
-- ShaleFS has no hard links or symlinks. Directories are linear lists.
+- The file system has no hard links or symlinks. Directories are linear lists.
 - Under TCG, a ring 3 ↔ ring 0 round trip costs about 16 µs. That is QEMU's
   emulation cost: the same path is 50–65 ns under KVM (see RESULTS).

@@ -1,5 +1,5 @@
-// Offline consistency checker for ShaleFS. Deliberately independent of
-// shalefs.cpp (it shares only format.hpp), so a bug in the file system can't
+// Offline consistency checker for the file system. Deliberately independent of
+// filesystem.cpp (it shares only format.hpp), so a bug in the file system can't
 // hide behind the same bug in its checker. Read-only.
 //
 // Run it after recovery (mount + unmount) to check a crashed image. Checks:
@@ -18,7 +18,7 @@
 
 #include "fs/blockdev.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 
 struct FsckReport {
   static constexpr int kMaxMessages = 12;
@@ -33,4 +33,4 @@ struct FsckReport {
 // couldn't be read at all.
 int fsck(BlockDevice* dev, FsckReport* report);
 
-}  // namespace shale::fs
+}  // namespace os::fs

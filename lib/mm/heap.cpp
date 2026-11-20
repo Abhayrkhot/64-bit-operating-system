@@ -1,6 +1,6 @@
 #include "mm/heap.hpp"
 
-namespace shale::mm {
+namespace os::mm {
 namespace {
 constexpr uint64_t kFrame = 4096;
 constexpr unsigned kMaxSlabOrder = 3;
@@ -262,4 +262,4 @@ bool Heap::check_invariants() const {
   return frames == slab_frames_;
 }
 
-}  // namespace shale::mm
+}  // namespace os::mm

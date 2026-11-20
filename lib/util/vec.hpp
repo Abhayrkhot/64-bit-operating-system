@@ -7,7 +7,7 @@
 
 #include "common/mem.hpp"
 
-namespace shale {
+namespace os {
 
 template <typename T>
 class Vec {
@@ -47,4 +47,4 @@ class Vec {
   size_t size_ = 0, cap_ = 0;
 };
 
-}  // namespace shale
+}  // namespace os

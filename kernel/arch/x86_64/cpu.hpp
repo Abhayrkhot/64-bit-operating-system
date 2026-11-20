@@ -56,18 +56,18 @@ inline CpuidRegs cpuid(uint32_t leaf, uint32_t subleaf = 0) {
   return r;
 }
 
-#define SHALE_CR_ACCESSORS(n)                                  \
+#define CR_ACCESSORS(n)                                  \
   inline uint64_t read_cr##n() {                               \
     uint64_t v;                                                \
     asm volatile("mov %%cr" #n ", %0" : "=r"(v));              \
     return v;                                                  \
   }                                                            \
   inline void write_cr##n(uint64_t v) { asm volatile("mov %0, %%cr" #n ::"r"(v) : "memory"); }
-SHALE_CR_ACCESSORS(0)
-SHALE_CR_ACCESSORS(2)
-SHALE_CR_ACCESSORS(3)
-SHALE_CR_ACCESSORS(4)
-#undef SHALE_CR_ACCESSORS
+CR_ACCESSORS(0)
+CR_ACCESSORS(2)
+CR_ACCESSORS(3)
+CR_ACCESSORS(4)
+#undef CR_ACCESSORS
 
 inline void invlpg(uint64_t va) { asm volatile("invlpg (%0)" ::"r"(va) : "memory"); }
 inline void cli() { asm volatile("cli" ::: "memory"); }

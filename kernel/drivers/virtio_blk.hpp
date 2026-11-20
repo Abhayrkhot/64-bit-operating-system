@@ -1,6 +1,6 @@
 // virtio-blk over legacy virtio-pci (QEMU: -device virtio-blk-pci,disable-modern=on).
 //
-// Implements shale::fs::BlockDevice. Writes are asynchronous: each one is
+// Implements os::fs::BlockDevice. Writes are asynchronous: each one is
 // copied into a bounce buffer and queued, so the caller may reuse its buffer
 // at once and the device may complete writes in any order. flush() waits for
 // every outstanding request and then issues VIRTIO_BLK_T_FLUSH, which is the
@@ -17,7 +17,7 @@
 namespace virtio_blk {
 
 // Probes PCI; returns the first virtio-blk disk or nullptr.
-shale::fs::BlockDevice* probe();
+os::fs::BlockDevice* probe();
 
 struct Stats {
   uint64_t reads, writes, flushes, polls_slept;

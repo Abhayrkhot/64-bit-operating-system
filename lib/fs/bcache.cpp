@@ -1,10 +1,10 @@
 #include "fs/bcache.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "common/mem.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 namespace {
 constexpr uint32_t kChunkBuffers = 64;  // 256 KiB per data allocation (physically contiguous in the kernel)
 constexpr uint32_t kNoBlock = 0xFFFFFFFFu;
@@ -91,7 +91,7 @@ int BufferCache::victim(Buffer** out) {
     *out = b;
     return 0;
   }
-  return -shale::sys::kENOMEM;  // the file system keeps transactions far smaller than the cache
+  return -os::sys::kENOMEM;  // the file system keeps transactions far smaller than the cache
 }
 
 int BufferCache::get(uint32_t block, Mode mode, Buffer** out) {
@@ -209,4 +209,4 @@ void BufferCache::forget(uint32_t block) {
   b->valid = false;
 }
 
-}  // namespace shale::fs
+}  // namespace os::fs

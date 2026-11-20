@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-namespace shale {
+namespace os {
 
 template <typename T>
 void heap_sort(T* a, size_t n) {
@@ -28,4 +28,4 @@ void heap_sort(T* a, size_t n) {
   }
 }
 
-}  // namespace shale
+}  // namespace os

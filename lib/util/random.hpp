@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-namespace shale {
+namespace os {
 
 class Random {
  public:
@@ -37,4 +37,4 @@ class Random {
   uint64_t s_[4];
 };
 
-}  // namespace shale
+}  // namespace os

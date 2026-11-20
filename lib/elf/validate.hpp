@@ -9,9 +9,9 @@
 
 #include <stdint.h>
 
-#include <shale/elf.hpp>
+#include <abi/elf.hpp>
 
-namespace shale::elf {
+namespace os::elf {
 
 constexpr unsigned kMaxSegments = 8;
 constexpr unsigned kMaxPhdrs = 32;
@@ -50,4 +50,4 @@ enum class Error {
 Error validate(const uint8_t* data, uint64_t size, uint64_t user_lo, uint64_t user_hi, Image* out);
 const char* error_name(Error e);
 
-}  // namespace shale::elf
+}  // namespace os::elf

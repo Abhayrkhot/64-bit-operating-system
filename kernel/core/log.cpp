@@ -9,7 +9,7 @@ extern "C" char __text_start[], __text_end[];
 
 void kvprintf(const char* fmt, va_list ap) {
   char buf[512];
-  int n = shale::fmt::vformat(buf, sizeof(buf), fmt, ap);
+  int n = os::fmt::vformat(buf, sizeof(buf), fmt, ap);
   if (n > static_cast<int>(sizeof(buf)) - 1) n = sizeof(buf) - 1;
   bool irq = arch::irq_save();
   serial::write(buf, static_cast<size_t>(n));

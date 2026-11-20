@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-namespace shale::sys {
+namespace os::sys {
 
 enum Number : uint64_t {
   kExit = 0,
@@ -88,4 +88,4 @@ constexpr uint64_t kMaxPath = 256;
 constexpr uint64_t kMaxArgBytes = 4096;  // argv strings + pointers on the initial stack
 constexpr uint64_t kMaxArgs = 64;
 
-}  // namespace shale::sys
+}  // namespace os::sys

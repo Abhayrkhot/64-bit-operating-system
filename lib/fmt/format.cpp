@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-namespace shale::fmt {
+namespace os::fmt {
 namespace {
 
 struct Out {
@@ -196,4 +196,4 @@ int format(char* buf, size_t size, const char* fmt, ...) {
   return n;
 }
 
-}  // namespace shale::fmt
+}  // namespace os::fmt

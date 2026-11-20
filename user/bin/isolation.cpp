@@ -1,7 +1,7 @@
 // Address-space isolation: several children write their own pattern into the
 // same virtual addresses (.data, heap, mmap) and keep checking it while the
 // scheduler interleaves them. Any cross-process leak shows up as a mismatch.
-#include "shale.hpp"
+#include "libc.hpp"
 
 namespace {
 uint8_t g_buf[64 * 1024];

@@ -10,9 +10,9 @@
 #include "mm/heap.hpp"
 #include "util/random.hpp"
 
-using shale::mm::BuddyAllocator;
-using shale::mm::FrameMeta;
-using shale::mm::Heap;
+using os::mm::BuddyAllocator;
+using os::mm::FrameMeta;
+using os::mm::Heap;
 
 namespace {
 
@@ -84,7 +84,7 @@ TEST(buddy_random_workload_matches_shadow) {
     bool exact;
   };
   std::vector<Block> live;
-  shale::Random rng(1234);
+  os::Random rng(1234);
   for (int step = 0; step < 300000; step++) {
     if (!live.empty() && (rng.chance(1, 2) || f.buddy.free_frames() < 2048)) {
       size_t i = rng.below(live.size());
@@ -182,7 +182,7 @@ TEST(heap_typed_caches_use_exact_sizes) {
 
 TEST(heap_random_workload_matches_shadow) {
   Arena a(1 << 16);  // 256 MiB
-  shale::Random rng(99);
+  os::Random rng(99);
   std::map<uintptr_t, size_t> live;  // address -> requested size
   std::vector<uintptr_t> order;
   for (int step = 0; step < 400000; step++) {

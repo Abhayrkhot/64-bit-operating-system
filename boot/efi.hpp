@@ -1,4 +1,4 @@
-// Minimal UEFI 2.x definitions for the Shale loader. Written from the UEFI
+// Minimal UEFI 2.x definitions for the loader. Written from the UEFI
 // specification; only the tables, protocols and fields the loader touches are
 // typed, everything else is a placeholder pointer so offsets stay correct.
 //

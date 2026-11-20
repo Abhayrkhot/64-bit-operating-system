@@ -1,4 +1,4 @@
-/* Shale kernel: higher half, one PT_LOAD per permission class so the loader
+/* Kernel: higher half, one PT_LOAD per permission class so the loader
  * (and later the kernel itself) can map text R-X, rodata R--, data RW-. */
 ENTRY(_start)
 

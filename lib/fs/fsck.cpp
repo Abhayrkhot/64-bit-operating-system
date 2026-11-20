@@ -1,16 +1,16 @@
 #include "fs/fsck.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "common/mem.hpp"
 #include "fmt/format.hpp"
 #include "fs/format.hpp"
 #include "util/crc32c.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 namespace {
 
-using namespace shale::sys;
+using namespace os::sys;
 constexpr uint32_t kMetaOwner = 0xFFFFFFFFu;
 
 struct Checker {
@@ -37,7 +37,7 @@ struct Checker {
 
   void error(const char* fmt, uint64_t a = 0, uint64_t b = 0, uint64_t c = 0) {
     if (rep->errors < FsckReport::kMaxMessages)
-      shale::fmt::format(rep->messages[rep->errors], sizeof(rep->messages[0]), fmt, a, b, c);
+      os::fmt::format(rep->messages[rep->errors], sizeof(rep->messages[0]), fmt, a, b, c);
     rep->errors++;
   }
 
@@ -270,4 +270,4 @@ int fsck(BlockDevice* dev, FsckReport* report) {
   return c.run();
 }
 
-}  // namespace shale::fs
+}  // namespace os::fs

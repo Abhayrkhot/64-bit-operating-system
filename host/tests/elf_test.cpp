@@ -10,7 +10,7 @@
 #include "common/test.hpp"
 #include "elf/validate.hpp"
 
-using namespace shale::elf;
+using namespace os::elf;
 
 namespace {
 

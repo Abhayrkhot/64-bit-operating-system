@@ -1,7 +1,7 @@
 // System call dispatch. Every user pointer goes through usercopy; data moves
 // through the process's kernel I/O buffer, so file backends never see user
 // memory.
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "arch/x86_64/cpu.hpp"
 #include "arch/x86_64/gdt.hpp"
@@ -24,7 +24,7 @@ namespace {
 
 bool g_force_iret;  // `sysret=0` on the command line: always return with iretq
 
-using namespace shale::sys;
+using namespace os::sys;
 using interrupts::Frame;
 
 constexpr uint64_t kIoChunk = 4096;
@@ -52,7 +52,7 @@ int64_t sys_write(Process* p, int fd, uint64_t buf, uint64_t len) {
   uint64_t done = 0;
   int64_t r = 0;
   while (done < len) {
-    uint64_t chunk = shale::min(kIoChunk, len - done);
+    uint64_t chunk = os::min(kIoChunk, len - done);
     if ((r = usercopy::from_user(kbuf, buf + done, chunk)) < 0) break;
     r = f->ops->write(f, kbuf, chunk);
     if (r <= 0) break;
@@ -74,7 +74,7 @@ int64_t sys_read(Process* p, int fd, uint64_t buf, uint64_t len) {
   uint64_t done = 0;
   int64_t r = 0;
   while (done < len) {
-    uint64_t chunk = shale::min(kIoChunk, len - done);
+    uint64_t chunk = os::min(kIoChunk, len - done);
     r = f->ops->read(f, kbuf, chunk);
     if (r <= 0) break;
     if (usercopy::to_user(buf + done, kbuf, static_cast<uint64_t>(r)) < 0) {
@@ -216,7 +216,7 @@ int64_t dispatch(Process* p, Frame* f) {
     case kYield: sched::yield(); return 0;
     case kGetpid: return p->pid;
     case kGetppid: return p->parent ? p->parent->pid : 0;
-    case kSleepNs: sched::sleep_ns(shale::min<uint64_t>(a0, 60ull * 1000000000ull)); return 0;
+    case kSleepNs: sched::sleep_ns(os::min<uint64_t>(a0, 60ull * 1000000000ull)); return 0;
     case kClockNs: return static_cast<int64_t>(time::now_ns());
     case kSpawn: return sys_spawn(p, a0, a1);
     case kWait: return sys_wait(p, static_cast<int64_t>(a0), a1);

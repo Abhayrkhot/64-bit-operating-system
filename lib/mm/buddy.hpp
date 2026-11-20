@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace shale::mm {
+namespace os::mm {
 
 enum class FrameState : uint8_t {
   kReserved = 0,   // not managed (firmware, MMIO hole, allocator metadata)
@@ -82,4 +82,4 @@ class BuddyAllocator {
   uint64_t managed_frames_ = 0;
 };
 
-}  // namespace shale::mm
+}  // namespace os::mm

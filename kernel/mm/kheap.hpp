@@ -16,6 +16,6 @@ void* kcache_alloc(int cache);
 // kfree that reports instead of panicking on pointers the heap didn't hand out.
 bool kfree_checked(void* p);
 size_t kmalloc_usable_size(const void* p);
-shale::mm::Heap::Stats kheap_stats();
-shale::mm::Heap::ClassStats kheap_class_stats(unsigned index);
+os::mm::Heap::Stats kheap_stats();
+os::mm::Heap::ClassStats kheap_class_stats(unsigned index);
 bool kheap_check();

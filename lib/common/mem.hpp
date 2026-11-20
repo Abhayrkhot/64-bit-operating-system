@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(SHALE_HOSTED)
+#if defined(OS_HOSTED)
 #include <string.h>
 
 #include <new>
@@ -23,7 +23,7 @@ inline void* operator new(size_t, void* p) noexcept { return p; }
 inline void* operator new[](size_t, void* p) noexcept { return p; }
 #endif
 
-namespace shale {
+namespace os {
 
 template <typename T>
 constexpr T min(T a, T b) {
@@ -60,4 +60,4 @@ void swap(T& a, T& b) {
   b = move(t);
 }
 
-}  // namespace shale
+}  // namespace os

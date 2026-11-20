@@ -1,40 +1,40 @@
-// ShaleFS functional tests on in-memory devices, checked against a model and
+// File-system functional tests on in-memory devices, checked against a model and
 // by fsck after every scenario.
 #include <map>
 #include <string>
 #include <vector>
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "common/blockdevs.hpp"
 #include "common/test.hpp"
 #include "fs/fsck.hpp"
-#include "fs/shalefs.hpp"
+#include "fs/filesystem.hpp"
 #include "util/random.hpp"
 
-using shale::fs::FsckReport;
-using shale::fs::InodeInfo;
-using shale::fs::InodeType;
-using shale::fs::ShaleFs;
+using os::fs::FsckReport;
+using os::fs::InodeInfo;
+using os::fs::InodeType;
+using os::fs::FileSystem;
 
 namespace {
 
-ShaleFs::Options small_cache() {
-  ShaleFs::Options o;
+FileSystem::Options small_cache() {
+  FileSystem::Options o;
   o.cache_blocks = 256;  // small enough that eviction paths run
   o.max_txn_blocks = 64;
   return o;
 }
 
-bool fsck_clean(shale::fs::BlockDevice* dev) {
+bool fsck_clean(os::fs::BlockDevice* dev) {
   FsckReport rep;
-  if (shale::fs::fsck(dev, &rep) < 0) return false;
+  if (os::fs::fsck(dev, &rep) < 0) return false;
   for (uint32_t i = 0; i < rep.errors && i < FsckReport::kMaxMessages; i++)
     std::printf("    fsck: %s\n", rep.messages[i]);
   return rep.errors == 0;
 }
 
-std::string read_all(ShaleFs& fs, const char* path) {
+std::string read_all(FileSystem& fs, const char* path) {
   uint32_t ino;
   if (fs.lookup(path, &ino) < 0) return "<missing>";
   InodeInfo info;
@@ -44,7 +44,7 @@ std::string read_all(ShaleFs& fs, const char* path) {
   return s;
 }
 
-int write_file(ShaleFs& fs, const char* path, const std::string& data) {
+int write_file(FileSystem& fs, const char* path, const std::string& data) {
   uint32_t ino;
   int r = fs.create(path, false, &ino);
   if (r < 0) return r;
@@ -54,7 +54,7 @@ int write_file(ShaleFs& fs, const char* path, const std::string& data) {
 }
 
 std::string pattern(size_t n, uint64_t seed) {
-  shale::Random rng(seed);
+  os::Random rng(seed);
   std::string s(n, '\0');
   for (auto& c : s) c = static_cast<char>(rng.next());
   return s;
@@ -64,37 +64,37 @@ std::string pattern(size_t n, uint64_t seed) {
 
 TEST(fs_mkfs_mount_unmount_clean) {
   host::MemDevice dev(8192);
-  EXPECT_EQ(ShaleFs::mkfs(&dev, {}), 0);
+  EXPECT_EQ(FileSystem::mkfs(&dev, {}), 0);
   EXPECT(fsck_clean(&dev));
-  ShaleFs fs;
+  FileSystem fs;
   EXPECT_EQ(fs.mount(&dev, small_cache()), 0);
   EXPECT_EQ(fs.unmount(), 0);
   FsckReport rep;
-  shale::fs::fsck(&dev, &rep);
+  os::fs::fsck(&dev, &rep);
   EXPECT(rep.errors == 0 && rep.clean_flag && rep.dirs == 1);
 }
 
 TEST(fs_files_dirs_and_persistence) {
   host::MemDevice dev(8192);
-  ShaleFs::mkfs(&dev, {});
+  FileSystem::mkfs(&dev, {});
   {
-    ShaleFs fs;
+    FileSystem fs;
     ASSERT(fs.mount(&dev, small_cache()) == 0);
     EXPECT_EQ(fs.mkdir("/a"), 0);
     EXPECT_EQ(fs.mkdir("/a/b"), 0);
-    EXPECT_EQ(fs.mkdir("/a"), -shale::sys::kEEXIST);
-    EXPECT_EQ(write_file(fs, "/a/b/hello.txt", "hello, shale"), 0);
+    EXPECT_EQ(fs.mkdir("/a"), -os::sys::kEEXIST);
+    EXPECT_EQ(write_file(fs, "/a/b/hello.txt", "hello, world"), 0);
     EXPECT_EQ(write_file(fs, "/top", pattern(100000, 1)), 0);
     uint32_t ino;
     EXPECT_EQ(fs.lookup("/a/b/../b/./hello.txt", &ino), 0);
-    EXPECT_EQ(fs.lookup("/nope", &ino), -shale::sys::kENOENT);
-    EXPECT_EQ(fs.lookup("/top/x", &ino), -shale::sys::kENOTDIR);
+    EXPECT_EQ(fs.lookup("/nope", &ino), -os::sys::kENOENT);
+    EXPECT_EQ(fs.lookup("/top/x", &ino), -os::sys::kENOTDIR);
     EXPECT_EQ(fs.unmount(), 0);
   }
   EXPECT(fsck_clean(&dev));
-  ShaleFs fs;
+  FileSystem fs;
   ASSERT(fs.mount(&dev, small_cache()) == 0);
-  EXPECT(read_all(fs, "/a/b/hello.txt") == "hello, shale");
+  EXPECT(read_all(fs, "/a/b/hello.txt") == "hello, world");
   EXPECT(read_all(fs, "/top") == pattern(100000, 1));
   uint32_t dir;
   fs.lookup("/a", &dir);
@@ -108,8 +108,8 @@ TEST(fs_files_dirs_and_persistence) {
 
 TEST(fs_large_files_use_indirect_blocks) {
   host::MemDevice dev(32768);  // 128 MiB
-  ShaleFs::mkfs(&dev, {});
-  ShaleFs fs;
+  FileSystem::mkfs(&dev, {});
+  FileSystem fs;
   ASSERT(fs.mount(&dev, small_cache()) == 0);
   uint32_t ino;
   ASSERT(fs.create("/big", true, &ino) == 0);
@@ -130,7 +130,7 @@ TEST(fs_large_files_use_indirect_blocks) {
   EXPECT_EQ(fs.unmount(), 0);
   EXPECT(fsck_clean(&dev));
   // Truncate into the middle of the indirect range, then delete.
-  ShaleFs fs2;
+  FileSystem fs2;
   ASSERT(fs2.mount(&dev, small_cache()) == 0);
   uint32_t free0 = fs2.free_blocks();
   EXPECT_EQ(fs2.truncate(ino, 1000000), 0);
@@ -145,8 +145,8 @@ TEST(fs_large_files_use_indirect_blocks) {
 
 TEST(fs_rename_semantics) {
   host::MemDevice dev(8192);
-  ShaleFs::mkfs(&dev, {});
-  ShaleFs fs;
+  FileSystem::mkfs(&dev, {});
+  FileSystem fs;
   ASSERT(fs.mount(&dev, small_cache()) == 0);
   fs.mkdir("/d1");
   fs.mkdir("/d1/sub");
@@ -156,7 +156,7 @@ TEST(fs_rename_semantics) {
   EXPECT_EQ(fs.rename("/d1/f", "/d2/g"), 0);  // replace
   EXPECT(read_all(fs, "/d2/g") == "one");
   EXPECT(read_all(fs, "/d1/f") == "<missing>");
-  EXPECT_EQ(fs.rename("/d1", "/d1/sub/x"), -shale::sys::kEINVAL);  // into itself
+  EXPECT_EQ(fs.rename("/d1", "/d1/sub/x"), -os::sys::kEINVAL);  // into itself
   EXPECT_EQ(fs.rename("/d1/sub", "/d2/sub"), 0);  // move a directory
   uint32_t sub, d2;
   fs.lookup("/d2/sub", &sub);
@@ -164,8 +164,8 @@ TEST(fs_rename_semantics) {
   uint32_t parent;
   EXPECT_EQ(fs.lookup("/d2/sub/..", &parent), 0);
   EXPECT_EQ(parent, d2);
-  EXPECT_EQ(fs.rename("/d2/g", "/d2/sub"), -shale::sys::kEISDIR);
-  EXPECT_EQ(fs.unlink("/d2"), -shale::sys::kENOTEMPTY);
+  EXPECT_EQ(fs.rename("/d2/g", "/d2/sub"), -os::sys::kEISDIR);
+  EXPECT_EQ(fs.unlink("/d2"), -os::sys::kENOTEMPTY);
   EXPECT_EQ(fs.unlink("/d2/sub"), 0);
   EXPECT_EQ(fs.unmount(), 0);
   EXPECT(fsck_clean(&dev));
@@ -173,15 +173,15 @@ TEST(fs_rename_semantics) {
 
 TEST(fs_enospc_is_clean) {
   host::MemDevice dev(1024);  // 4 MiB
-  ShaleFs::mkfs(&dev, {});
-  ShaleFs fs;
+  FileSystem::mkfs(&dev, {});
+  FileSystem fs;
   ASSERT(fs.mount(&dev, small_cache()) == 0);
   uint32_t ino;
   fs.create("/fill", true, &ino);
   std::string chunk = pattern(1 << 20, 3);
   int64_t total = 0, r;
   while ((r = fs.write(ino, static_cast<uint64_t>(total), chunk.data(), chunk.size())) > 0) total += r;
-  EXPECT_EQ(r, -shale::sys::kENOSPC);
+  EXPECT_EQ(r, -os::sys::kENOSPC);
   EXPECT(total > 1 << 20);
   EXPECT_EQ(fs.unlink("/fill"), 0);
   // The space comes back (after the checkpoint that releases deferred frees).
@@ -195,8 +195,8 @@ TEST(fs_journal_replays_committed_but_unwritten_metadata) {
   // Commit, then "crash" before any checkpoint: copy the device as it is
   // and mount the copy. Everything committed must be there.
   host::MemDevice dev(8192);
-  ShaleFs::mkfs(&dev, {});
-  ShaleFs fs;
+  FileSystem::mkfs(&dev, {});
+  FileSystem fs;
   ASSERT(fs.mount(&dev, small_cache()) == 0);
   fs.mkdir("/logs");
   for (int i = 0; i < 20; i++) {
@@ -206,7 +206,7 @@ TEST(fs_journal_replays_committed_but_unwritten_metadata) {
   EXPECT_EQ(fs.sync(), 0);  // commit only: metadata lives in the journal
   host::MemDevice crashed(8192);
   crashed.bytes() = dev.bytes();
-  ShaleFs after;
+  FileSystem after;
   ASSERT(after.mount(&crashed, small_cache()) == 0);
   EXPECT(after.stats().replayed_txns > 0);
   for (int i = 0; i < 20; i++) {
@@ -220,13 +220,13 @@ TEST(fs_journal_replays_committed_but_unwritten_metadata) {
 TEST(fs_random_workload_matches_model_and_fscks_clean) {
   for (int journaling = 1; journaling >= 0; journaling--) {
     host::MemDevice dev(16384);
-    ShaleFs::MkfsOptions mo;
+    FileSystem::MkfsOptions mo;
     mo.journaling = journaling;
-    ShaleFs::mkfs(&dev, mo);
-    auto* fs = new ShaleFs;
+    FileSystem::mkfs(&dev, mo);
+    auto* fs = new FileSystem;
     ASSERT(fs->mount(&dev, small_cache()) == 0);
     std::map<std::string, std::string> model;
-    shale::Random rng(11 + journaling);
+    os::Random rng(11 + journaling);
     for (int step = 0; step < 3000; step++) {
       std::string path = "/f" + std::to_string(rng.below(40));
       uint64_t op = rng.below(100);
@@ -260,7 +260,7 @@ TEST(fs_random_workload_matches_model_and_fscks_clean) {
         // remount
         EXPECT_EQ(fs->unmount(), 0);
         delete fs;
-        fs = new ShaleFs;
+        fs = new FileSystem;
         ASSERT(fs->mount(&dev, small_cache()) == 0);
       }
     }

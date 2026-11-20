@@ -1,6 +1,6 @@
 #include "drivers/virtio_blk.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "arch/x86_64/cpu.hpp"
 #include "common/mem.hpp"
@@ -15,7 +15,7 @@
 namespace virtio_blk {
 namespace {
 
-using shale::fs::kBlockSize;
+using os::fs::kBlockSize;
 
 constexpr uint16_t kVendorVirtio = 0x1AF4, kDeviceLegacyBlock = 0x1001;
 // Legacy virtio-pci register block (BAR0, I/O space), without MSI-X.
@@ -59,7 +59,7 @@ Stats g_stats;
 
 void barrier() { __atomic_thread_fence(__ATOMIC_SEQ_CST); }
 
-class Disk final : public shale::fs::BlockDevice {
+class Disk final : public os::fs::BlockDevice {
  public:
   bool init(const pci::Device& dev);
   uint32_t block_count() const override { return blocks_; }
@@ -109,8 +109,8 @@ bool Disk::init(const pci::Device& dev) {
   // Legacy ring layout: descriptors, then the available ring, then (page
   // aligned) the used ring. One physically contiguous, zeroed allocation.
   uint64_t avail_off = 16ull * qsize_;
-  uint64_t used_off = shale::align_up(avail_off + 6 + 2ull * qsize_, 4096);
-  uint64_t bytes = used_off + shale::align_up(6 + 8ull * qsize_, 4096);
+  uint64_t used_off = os::align_up(avail_off + 6 + 2ull * qsize_, 4096);
+  uint64_t bytes = used_off + os::align_up(6 + 8ull * qsize_, 4096);
   unsigned order = 0;
   while ((4096ull << order) < bytes) order++;
   uint64_t ring = pmm::alloc_zeroed(order);
@@ -125,13 +125,13 @@ bool Disk::init(const pci::Device& dev) {
   num_free_ = qsize_;
   avail_[0] = kAvailNoInterrupt;  // we poll the used ring
   arch::outl(io_ + kRegQueuePfn, static_cast<uint32_t>(ring >> 12));
-  nslots_ = shale::min<unsigned>(kMaxSlots, qsize_ / 3);
+  nslots_ = os::min<unsigned>(kMaxSlots, qsize_ / 3);
   for (unsigned i = 0; i < nslots_; i++) {
     slots_[i].bounce = static_cast<uint8_t*>(kmalloc(kBlockSize));
     if (!slots_[i].bounce) return false;
   }
   uint64_t sectors = arch::inl(io_ + kRegConfig) | (static_cast<uint64_t>(arch::inl(io_ + kRegConfig + 4)) << 32);
-  blocks_ = static_cast<uint32_t>(shale::min<uint64_t>(sectors / 8, 0xFFFFFFF0ull));
+  blocks_ = static_cast<uint32_t>(os::min<uint64_t>(sectors / 8, 0xFFFFFFF0ull));
   arch::outb(io_ + kRegStatus, kStatusAck | kStatusDriver | kStatusDriverOk);
   kprintf("virtio-blk: %lu MiB at io %x, queue %u, %u slots, flush %s\n", sectors / 2048, io_, qsize_, nslots_,
           can_flush_ ? "yes" : "no");
@@ -215,7 +215,7 @@ int Disk::wait(Slot* s) {
       sched::sleep_ms(1);  // a very slow device (host flush under load)
     }
   }
-  return s->status == 0 ? 0 : -shale::sys::kEIO;
+  return s->status == 0 ? 0 : -os::sys::kEIO;
 }
 
 Slot* Disk::acquire() {
@@ -236,7 +236,7 @@ Slot* Disk::acquire() {
 }
 
 int Disk::read(uint32_t block, uint32_t count, void* buf) {
-  if (block + static_cast<uint64_t>(count) > blocks_) return -shale::sys::kEIO;
+  if (block + static_cast<uint64_t>(count) > blocks_) return -os::sys::kEIO;
   lock_.lock();
   int r = 0;
   for (uint32_t i = 0; i < count && r == 0; i++) {
@@ -260,7 +260,7 @@ int Disk::read_batch(const uint32_t* blocks, uint32_t n, uint8_t* const* bufs) {
     uint32_t m = 0;
     for (; done + m < n && m < nslots_; m++) {
       if (blocks[done + m] >= blocks_) {
-        r = -shale::sys::kEIO;
+        r = -os::sys::kEIO;
         break;
       }
       batch[m] = acquire();
@@ -280,7 +280,7 @@ int Disk::read_batch(const uint32_t* blocks, uint32_t n, uint8_t* const* bufs) {
 }
 
 int Disk::write(uint32_t block, uint32_t count, const void* buf) {
-  if (block + static_cast<uint64_t>(count) > blocks_) return -shale::sys::kEIO;
+  if (block + static_cast<uint64_t>(count) > blocks_) return -os::sys::kEIO;
   lock_.lock();
   for (uint32_t i = 0; i < count; i++) {
     Slot* s = acquire();
@@ -312,7 +312,7 @@ int Disk::flush() {
   }
   if (write_error_) {
     write_error_ = false;
-    r = -shale::sys::kEIO;
+    r = -os::sys::kEIO;
   }
   g_stats.flushes++;
   lock_.unlock();
@@ -321,7 +321,7 @@ int Disk::flush() {
 
 }  // namespace
 
-shale::fs::BlockDevice* probe() {
+os::fs::BlockDevice* probe() {
   pci::Device dev;
   if (!pci::find(kVendorVirtio, kDeviceLegacyBlock, 0, &dev)) return nullptr;
   auto* disk = new Disk();

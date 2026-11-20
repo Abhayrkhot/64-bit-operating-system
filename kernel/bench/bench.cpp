@@ -16,7 +16,7 @@ namespace {
 // cycles -> "123.4" (ns with one decimal).
 void fmt_ns(char* out, size_t size, uint64_t cycles) {
   uint64_t tenths = static_cast<uint64_t>((static_cast<unsigned __int128>(cycles) * 10000000000ull) / time::tsc_hz());
-  shale::fmt::format(out, size, "%lu.%lu", tenths / 10, tenths % 10);
+  os::fmt::format(out, size, "%lu.%lu", tenths / 10, tenths % 10);
 }
 
 }  // namespace
@@ -26,10 +26,10 @@ void report_cycles(const char* bench, const char* metric, uint64_t* cycles, size
     kprintf("BENCH %s %s n=0\n", bench, metric);
     return;
   }
-  shale::heap_sort(cycles, n);
+  os::heap_sort(cycles, n);
   unsigned __int128 sum = 0;
   for (size_t i = 0; i < n; i++) sum += cycles[i];
-  auto pct = [&](uint64_t per_mille) { return cycles[shale::min<size_t>(n - 1, n * per_mille / 1000)]; };
+  auto pct = [&](uint64_t per_mille) { return cycles[os::min<size_t>(n - 1, n * per_mille / 1000)]; };
   char mean[24], p50[24], p90[24], p99[24], p999[24], mn[24], mx[24];
   fmt_ns(mean, sizeof(mean), static_cast<uint64_t>(sum / n));
   fmt_ns(p50, sizeof(p50), pct(500));

@@ -11,12 +11,12 @@
 // reads, long sleeps), or make the kernel scribble over the fuzzer's own
 // stack and globals, are steered to harmless variants; everything else hits
 // the kernel as generated.
-#include "shale.hpp"
+#include "libc.hpp"
 #include "util/random.hpp"
 
 namespace {
 
-shale::Random* g_rng;
+os::Random* g_rng;
 uint64_t g_mapped, g_readonly;
 char g_buf[8192];
 
@@ -84,7 +84,7 @@ uint64_t safe_out_pointer(uint64_t p) {
 int main(int argc, char** argv) {
   uint64_t iters = argc > 1 ? static_cast<uint64_t>(atol(argv[1])) : 100000;
   uint64_t seed = argc > 2 ? static_cast<uint64_t>(atol(argv[2])) : 1;
-  shale::Random rng(seed);
+  os::Random rng(seed);
   g_rng = &rng;
   g_mapped = static_cast<uint64_t>(mmap(16 * 4096, sys::kProtRead | sys::kProtWrite));
   g_readonly = static_cast<uint64_t>(mmap(4096, sys::kProtRead));

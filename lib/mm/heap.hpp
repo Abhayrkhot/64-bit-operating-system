@@ -22,7 +22,7 @@
 
 #include "mm/buddy.hpp"
 
-namespace shale::mm {
+namespace os::mm {
 
 class Heap {
  public:
@@ -115,4 +115,4 @@ class Heap {
   uint64_t failed_ = 0;
 };
 
-}  // namespace shale::mm
+}  // namespace os::mm

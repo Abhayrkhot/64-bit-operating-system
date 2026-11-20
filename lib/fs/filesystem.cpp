@@ -1,14 +1,14 @@
-#include "fs/shalefs.hpp"
+#include "fs/filesystem.hpp"
 
-#include <shale/syscall.hpp>
+#include <abi/syscall.hpp>
 
 #include "common/mem.hpp"
 #include "util/crc32c.hpp"
 
-namespace shale::fs {
+namespace os::fs {
 namespace {
 
-using namespace shale::sys;
+using namespace os::sys;
 using Mode = BufferCache::Mode;
 constexpr uint32_t kBitsPerBlock = kBlockSize * 8;
 constexpr uint32_t kIndirectSpan = kPointersPerBlock;
@@ -42,14 +42,14 @@ int name_len_ok(const char* name) {
 
 }  // namespace
 
-ShaleFs::~ShaleFs() {
+FileSystem::~FileSystem() {
   delete[] deferred_;
   delete[] scratch_;
 }
 
 // ---- mkfs -----------------------------------------------------------------
 
-int ShaleFs::mkfs(BlockDevice* dev, const MkfsOptions& o) {
+int FileSystem::mkfs(BlockDevice* dev, const MkfsOptions& o) {
   uint32_t total = dev->block_count();
   if (total < 256) return -kENOSPC;
   Superblock sb{};
@@ -59,9 +59,9 @@ int ShaleFs::mkfs(BlockDevice* dev, const MkfsOptions& o) {
   sb.uuid = o.uuid ? o.uuid : 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(total) << 20);
   sb.total_blocks = total;
   uint32_t inodes = o.inode_count ? o.inode_count : total / 4;
-  inodes = shale::max<uint32_t>(64, shale::min<uint32_t>(inodes, 1u << 22));
+  inodes = os::max<uint32_t>(64, os::min<uint32_t>(inodes, 1u << 22));
   inodes = (inodes + kInodesPerBlock - 1) / kInodesPerBlock * kInodesPerBlock;
-  uint32_t journal = o.journal_blocks ? o.journal_blocks : shale::max<uint32_t>(256, shale::min<uint32_t>(total / 16, 8192));
+  uint32_t journal = o.journal_blocks ? o.journal_blocks : os::max<uint32_t>(256, os::min<uint32_t>(total / 16, 8192));
   if (journal > total / 4) journal = total / 4;
   sb.inode_count = inodes;
   sb.journal_start = 2;
@@ -86,7 +86,7 @@ int ShaleFs::mkfs(BlockDevice* dev, const MkfsOptions& o) {
   memset(zeros, 0, kChunk * kBlockSize);
   int r = 0;
   for (uint32_t b = 0; b < sb.data_start && r == 0; b += kChunk)
-    r = dev->write(b, shale::min(kChunk, sb.data_start - b), zeros);
+    r = dev->write(b, os::min(kChunk, sb.data_start - b), zeros);
   auto* blk = new uint8_t[kBlockSize];
   if (r == 0) {  // inode bitmap: inode 0 reserved, 1 = root
     memset(blk, 0, kBlockSize);
@@ -127,7 +127,7 @@ int ShaleFs::mkfs(BlockDevice* dev, const MkfsOptions& o) {
 
 // ---- mount / unmount --------------------------------------------------------
 
-int ShaleFs::mount(BlockDevice* dev, const Options& opts) {
+int FileSystem::mount(BlockDevice* dev, const Options& opts) {
   if (dev_) return -kEBUSY;
   opts_ = opts;
   auto* blk = new uint8_t[kBlockSize];
@@ -176,7 +176,7 @@ int ShaleFs::mount(BlockDevice* dev, const Options& opts) {
   return r;
 }
 
-int ShaleFs::unmount() {
+int FileSystem::unmount() {
   if (!dev_) return -kEINVAL;
   int r = checkpoint();
   if (r == 0) {
@@ -188,7 +188,7 @@ int ShaleFs::unmount() {
   return r;
 }
 
-int ShaleFs::write_superblock() {
+int FileSystem::write_superblock() {
   sb_.sb_seq++;
   sb_.crc = sb_crc(sb_);
   memset(scratch_, 0, kBlockSize);
@@ -196,20 +196,20 @@ int ShaleFs::write_superblock() {
   return dev_->write(static_cast<uint32_t>(sb_.sb_seq & 1), 1, scratch_);
 }
 
-int ShaleFs::flush() {
+int FileSystem::flush() {
   stats_.flushes++;
   int r = dev_->flush();
   if (r == 0) cache_.flushed();
   return r;
 }
 
-uint32_t ShaleFs::journal_phys(uint64_t pos) const {
+uint32_t FileSystem::journal_phys(uint64_t pos) const {
   return sb_.journal_start + static_cast<uint32_t>(pos % sb_.journal_blocks);
 }
 
 // ---- recovery -----------------------------------------------------------------
 
-int ShaleFs::recover() {
+int FileSystem::recover() {
   const uint32_t J = sb_.journal_blocks;
   uint64_t pos = sb_.journal_tail_block;
   uint64_t seq = sb_.journal_tail_seq;
@@ -289,13 +289,13 @@ int ShaleFs::recover() {
   running_seq_ = seq + 1;
   sb_.journal_tail_block = static_cast<uint32_t>(pos);
   sb_.journal_tail_seq = running_seq_;
-  if (stats_.replayed_txns && opts_.log) opts_.log("shalefs: journal replayed");
+  if (stats_.replayed_txns && opts_.log) opts_.log("fs: journal replayed");
   return 0;
 }
 
 // ---- transactions -----------------------------------------------------------------
 
-void ShaleFs::dirty_meta(Buffer* b) {
+void FileSystem::dirty_meta(Buffer* b) {
   b->meta = true;
   b->dirty = true;
   if (journaling_ && b->txn != running_seq_) {
@@ -304,9 +304,9 @@ void ShaleFs::dirty_meta(Buffer* b) {
   }
 }
 
-void ShaleFs::dirty_data(Buffer* b) { cache_.note_dirty_data(b); }
+void FileSystem::dirty_data(Buffer* b) { cache_.note_dirty_data(b); }
 
-int ShaleFs::begin(uint32_t credits) {
+int FileSystem::begin(uint32_t credits) {
   int r;
   credits += sb_.block_bitmap_blocks + sb_.inode_bitmap_blocks;
   // Frees wait for a checkpoint before reuse; take one when that's what
@@ -325,7 +325,7 @@ int ShaleFs::begin(uint32_t credits) {
   return 0;
 }
 
-int ShaleFs::commit() {
+int FileSystem::commit() {
   int r;
   if (!journaling_) {
     // Control mode (no journal): write everything in place, then flush.
@@ -375,7 +375,7 @@ int ShaleFs::commit() {
     auto* d = reinterpret_cast<JournalDescriptor*>(scratch_);
     d->h = {kJournalMagic, JournalBlockType::kDescriptor, running_seq_, sb_.uuid};
     uint32_t first = g * kTargetsPerDescriptor;
-    d->count = shale::min(kTargetsPerDescriptor, n - first);
+    d->count = os::min(kTargetsPerDescriptor, n - first);
     for (uint32_t i = 0; i < d->count; i++) d->targets[i] = txn_bufs_[first + i]->block;
     crc = crc32c(crc, scratch_, kBlockSize);
     if ((r = dev_->write(journal_phys(pos++), 1, scratch_)) < 0) return r;
@@ -409,7 +409,7 @@ int ShaleFs::commit() {
   return 0;
 }
 
-int ShaleFs::checkpoint() {
+int FileSystem::checkpoint() {
   int r = commit();
   if (r < 0) return r;
   if (!journaling_) {
@@ -439,12 +439,12 @@ int ShaleFs::checkpoint() {
   return 0;
 }
 
-int ShaleFs::fsync(uint32_t) { return commit(); }
-int ShaleFs::sync() { return commit(); }
+int FileSystem::fsync(uint32_t) { return commit(); }
+int FileSystem::sync() { return commit(); }
 
 // ---- allocation -------------------------------------------------------------------
 
-int ShaleFs::alloc_block(uint32_t* out) {
+int FileSystem::alloc_block(uint32_t* out) {
   const uint32_t first = sb_.data_start, n = sb_.total_blocks - sb_.data_start;
   Buffer* bm = nullptr;
   uint32_t bm_index = ~0u;
@@ -474,7 +474,7 @@ int ShaleFs::alloc_block(uint32_t* out) {
   return -kENOSPC;
 }
 
-int ShaleFs::free_block(uint32_t block) {
+int FileSystem::free_block(uint32_t block) {
   if (block < sb_.data_start || block >= sb_.total_blocks) return -kEIO;
   Buffer* bm;
   int r = cache_.get(sb_.block_bitmap_start + block / kBitsPerBlock, Mode::kRead, &bm);
@@ -495,7 +495,7 @@ int ShaleFs::free_block(uint32_t block) {
   return 0;
 }
 
-int ShaleFs::alloc_inode(uint32_t* out) {
+int FileSystem::alloc_inode(uint32_t* out) {
   for (uint32_t i = 0; i < sb_.inode_count; i++) {
     uint32_t ino = 1 + (inode_rover_ - 1 + i) % (sb_.inode_count - 1);
     Buffer* bm;
@@ -514,7 +514,7 @@ int ShaleFs::alloc_inode(uint32_t* out) {
   return -kENOSPC;
 }
 
-int ShaleFs::free_inode_bit(uint32_t ino) {
+int FileSystem::free_inode_bit(uint32_t ino) {
   Buffer* bm;
   int r = cache_.get(sb_.inode_bitmap_start + ino / kBitsPerBlock, Mode::kRead, &bm);
   if (r < 0) return r;
@@ -526,7 +526,7 @@ int ShaleFs::free_inode_bit(uint32_t ino) {
 
 // ---- inodes and block maps --------------------------------------------------------
 
-int ShaleFs::get_inode(uint32_t ino, Buffer** buf, Inode** ip) {
+int FileSystem::get_inode(uint32_t ino, Buffer** buf, Inode** ip) {
   if (ino == 0 || ino >= sb_.inode_count) return -kENOENT;
   int r = cache_.get(sb_.inode_table_start + ino / kInodesPerBlock, Mode::kRead, buf);
   if (r < 0) return r;
@@ -534,7 +534,7 @@ int ShaleFs::get_inode(uint32_t ino, Buffer** buf, Inode** ip) {
   return 0;
 }
 
-uint32_t ShaleFs::generation(uint32_t ino) {
+uint32_t FileSystem::generation(uint32_t ino) {
   Buffer* b;
   Inode* ip;
   if (get_inode(ino, &b, &ip) < 0) return 0;
@@ -545,7 +545,7 @@ uint32_t ShaleFs::generation(uint32_t ino) {
 
 // Resolves a file block to a disk block, optionally allocating it (and any
 // missing indirect blocks). *fresh is set when a new data block was allocated.
-int ShaleFs::bmap(Inode* ip, Buffer* ib, uint64_t fb, bool alloc, uint32_t* out, bool* fresh) {
+int FileSystem::bmap(Inode* ip, Buffer* ib, uint64_t fb, bool alloc, uint32_t* out, bool* fresh) {
   *fresh = false;
   *out = 0;
   if (fb >= kMaxFileBlocks) return -kEFBIG;
@@ -626,7 +626,7 @@ int ShaleFs::bmap(Inode* ip, Buffer* ib, uint64_t fb, bool alloc, uint32_t* out,
 
 // Frees every block at file index >= first. When the whole file goes
 // (first == 0) the pointer blocks are freed without being rewritten.
-int ShaleFs::free_blocks_from(Inode* ip, Buffer* ib, uint64_t first) {
+int FileSystem::free_blocks_from(Inode* ip, Buffer* ib, uint64_t first) {
   int r;
   const bool whole = first == 0;
   for (uint64_t fb = first; fb < kDirectBlocks; fb++) {
@@ -684,7 +684,7 @@ int ShaleFs::free_blocks_from(Inode* ip, Buffer* ib, uint64_t first) {
   return 0;
 }
 
-int ShaleFs::release_inode(uint32_t ino) {
+int FileSystem::release_inode(uint32_t ino) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(ino, &ib, &ip);
@@ -709,7 +709,7 @@ int ShaleFs::release_inode(uint32_t ino) {
 
 // ---- directories -----------------------------------------------------------------
 
-int ShaleFs::dir_find(uint32_t dir, const char* name, uint32_t* child, InodeType* type, uint64_t* slot) {
+int FileSystem::dir_find(uint32_t dir, const char* name, uint32_t* child, InodeType* type, uint64_t* slot) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(dir, &ib, &ip);
@@ -751,7 +751,7 @@ int ShaleFs::dir_find(uint32_t dir, const char* name, uint32_t* child, InodeType
   return r;
 }
 
-int ShaleFs::dir_add(uint32_t dir, const char* name, uint32_t child, InodeType type) {
+int FileSystem::dir_add(uint32_t dir, const char* name, uint32_t child, InodeType type) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(dir, &ib, &ip);
@@ -809,7 +809,7 @@ int ShaleFs::dir_add(uint32_t dir, const char* name, uint32_t child, InodeType t
   return r;
 }
 
-int ShaleFs::dir_remove_slot(uint32_t dir, uint64_t slot) {
+int FileSystem::dir_remove_slot(uint32_t dir, uint64_t slot) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(dir, &ib, &ip);
@@ -830,7 +830,7 @@ int ShaleFs::dir_remove_slot(uint32_t dir, uint64_t slot) {
   return r;
 }
 
-int ShaleFs::dir_empty(uint32_t dir, bool* empty) {
+int FileSystem::dir_empty(uint32_t dir, bool* empty) {
   char name[58];
   uint32_t child;
   InodeType type;
@@ -840,7 +840,7 @@ int ShaleFs::dir_empty(uint32_t dir, bool* empty) {
   return 0;
 }
 
-int ShaleFs::readdir(uint32_t dir, uint64_t index, char name[58], uint32_t* child, InodeType* type) {
+int FileSystem::readdir(uint32_t dir, uint64_t index, char name[58], uint32_t* child, InodeType* type) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(dir, &ib, &ip);
@@ -885,7 +885,7 @@ int ShaleFs::readdir(uint32_t dir, uint64_t index, char name[58], uint32_t* chil
 
 // ---- paths -----------------------------------------------------------------------
 
-int ShaleFs::resolve(const char* path, uint32_t* ino) {
+int FileSystem::resolve(const char* path, uint32_t* ino) {
   if (path[0] != '/') return -kENOENT;
   uint32_t cur = kRootInode;
   const char* p = path;
@@ -918,7 +918,7 @@ int ShaleFs::resolve(const char* path, uint32_t* ino) {
   return 0;
 }
 
-int ShaleFs::resolve_parent(const char* path, uint32_t* parent, char* name) {
+int FileSystem::resolve_parent(const char* path, uint32_t* parent, char* name) {
   size_t len = strlen(path);
   while (len > 1 && path[len - 1] == '/') len--;
   if (path[0] != '/' || len <= 1) return -kEINVAL;  // "/" itself has no parent entry
@@ -944,13 +944,13 @@ int ShaleFs::resolve_parent(const char* path, uint32_t* parent, char* name) {
 
 // ---- operations ------------------------------------------------------------------
 
-int ShaleFs::lookup(const char* path, uint32_t* ino) { return resolve(path, ino); }
+int FileSystem::lookup(const char* path, uint32_t* ino) { return resolve(path, ino); }
 
 namespace {
 constexpr uint32_t kOpCredits = 16;
 }
 
-int ShaleFs::create(const char* path, bool exclusive, uint32_t* ino) {
+int FileSystem::create(const char* path, bool exclusive, uint32_t* ino) {
   uint32_t parent, child;
   char name[kNameMax + 1];
   int r = resolve_parent(path, &parent, name);
@@ -987,7 +987,7 @@ int ShaleFs::create(const char* path, bool exclusive, uint32_t* ino) {
   return 0;
 }
 
-int ShaleFs::mkdir(const char* path) {
+int FileSystem::mkdir(const char* path) {
   uint32_t parent, child;
   char name[kNameMax + 1];
   int r = resolve_parent(path, &parent, name);
@@ -1016,7 +1016,7 @@ int ShaleFs::mkdir(const char* path) {
   return 0;
 }
 
-int ShaleFs::unlink(const char* path) {
+int FileSystem::unlink(const char* path) {
   uint32_t parent, child;
   char name[kNameMax + 1];
   int r = resolve_parent(path, &parent, name);
@@ -1034,7 +1034,7 @@ int ShaleFs::unlink(const char* path) {
   return release_inode(child);
 }
 
-int ShaleFs::rename(const char* from, const char* to) {
+int FileSystem::rename(const char* from, const char* to) {
   uint32_t sp, dp, src, dst;
   char sname[kNameMax + 1], dname[kNameMax + 1];
   int r = resolve_parent(from, &sp, sname);
@@ -1101,7 +1101,7 @@ int ShaleFs::rename(const char* from, const char* to) {
   return 0;
 }
 
-int ShaleFs::stat(uint32_t ino, InodeInfo* out) {
+int FileSystem::stat(uint32_t ino, InodeInfo* out) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(ino, &ib, &ip);
@@ -1115,7 +1115,7 @@ int ShaleFs::stat(uint32_t ino, InodeInfo* out) {
   return 0;
 }
 
-int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
+int64_t FileSystem::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
   Buffer* ib;
   Inode* ip;
   int r = get_inode(ino, &ib, &ip);
@@ -1128,7 +1128,7 @@ int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
     cache_.put(ib);
     return 0;
   }
-  n = shale::min(n, ip->size - offset);
+  n = os::min(n, ip->size - offset);
   auto* out = static_cast<uint8_t*>(buf);
   uint64_t done = 0;
   uint64_t prefetched_to = offset / kBlockSize;  // file blocks below this are already requested
@@ -1153,7 +1153,7 @@ int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
       prefetched_to = fb0 + count;
     }
     uint64_t pos = offset + done, within = pos % kBlockSize;
-    uint64_t len = shale::min<uint64_t>(kBlockSize - within, n - done);
+    uint64_t len = os::min<uint64_t>(kBlockSize - within, n - done);
     uint32_t block;
     bool fresh;
     if ((r = bmap(ip, ib, pos / kBlockSize, false, &block, &fresh)) < 0) break;
@@ -1173,7 +1173,7 @@ int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
   return done ? static_cast<int64_t>(done) : r;
 }
 
-int64_t ShaleFs::write(uint32_t ino, uint64_t offset, const void* buf, uint64_t n) {
+int64_t FileSystem::write(uint32_t ino, uint64_t offset, const void* buf, uint64_t n) {
   if (n == 0) return 0;
   uint64_t end;
   if (__builtin_add_overflow(offset, n, &end) || end > kMaxFileBlocks * kBlockSize) return -kEFBIG;
@@ -1191,10 +1191,10 @@ int64_t ShaleFs::write(uint32_t ino, uint64_t offset, const void* buf, uint64_t 
       r = ip->type == InodeType::kDir ? -kEISDIR : -kENOENT;
       break;
     }
-    uint64_t chunk_end = shale::min(n, done + kChunkBlocks * kBlockSize);
+    uint64_t chunk_end = os::min(n, done + kChunkBlocks * kBlockSize);
     while (done < chunk_end) {
       uint64_t pos = offset + done, within = pos % kBlockSize;
-      uint64_t len = shale::min<uint64_t>(kBlockSize - within, chunk_end - done);
+      uint64_t len = os::min<uint64_t>(kBlockSize - within, chunk_end - done);
       uint32_t block;
       bool fresh;
       if ((r = bmap(ip, ib, pos / kBlockSize, true, &block, &fresh)) < 0) break;
@@ -1214,7 +1214,7 @@ int64_t ShaleFs::write(uint32_t ino, uint64_t offset, const void* buf, uint64_t 
   return done ? static_cast<int64_t>(done) : r;
 }
 
-int ShaleFs::truncate(uint32_t ino, uint64_t size) {
+int FileSystem::truncate(uint32_t ino, uint64_t size) {
   if (size > kMaxFileBlocks * kBlockSize) return -kEFBIG;
   Buffer* ib;
   Inode* ip;
@@ -1251,4 +1251,4 @@ int ShaleFs::truncate(uint32_t ino, uint64_t size) {
   return r;
 }
 
-}  // namespace shale::fs
+}  // namespace os::fs

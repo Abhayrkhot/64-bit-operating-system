@@ -38,7 +38,7 @@ void run_constructors() {
 // `run=/bin/prog args=a:b:c`: run one program and report how it ended.
 [[noreturn]] void run_program(const char* path) {
   static char args[256];
-  static const char* argv[shale::sys::kMaxArgs + 1];
+  static const char* argv[os::sys::kMaxArgs + 1];
   int argc = 0;
   const char* base = path;
   for (const char* c = path; *c; c++)
@@ -46,7 +46,7 @@ void run_constructors() {
   argv[argc++] = base;
   if (cmdline::get("args", args, sizeof(args)) && args[0]) {
     char* p = args;
-    while (*p && argc < static_cast<int>(shale::sys::kMaxArgs)) {
+    while (*p && argc < static_cast<int>(os::sys::kMaxArgs)) {
       argv[argc++] = p;
       while (*p && *p != ':') p++;
       if (*p) *p++ = 0;
@@ -72,11 +72,11 @@ void run_constructors() {
   }
   uint64_t replayed = vfs::fs()->stats().replayed_txns;
   vfs::shutdown();
-  shale::fs::FsckReport rep;
-  int r = shale::fs::fsck(vfs::disk(), &rep);
+  os::fs::FsckReport rep;
+  int r = os::fs::fsck(vfs::disk(), &rep);
   kprintf("FSCK errors=%u files=%u dirs=%u used_blocks=%lu replayed_txns=%lu\n", rep.errors, rep.files, rep.dirs,
           rep.used_blocks, replayed);
-  for (uint32_t i = 0; i < rep.errors && i < shale::fs::FsckReport::kMaxMessages; i++)
+  for (uint32_t i = 0; i < rep.errors && i < os::fs::FsckReport::kMaxMessages; i++)
     kprintf("FSCK   %s\n", rep.messages[i]);
   power::qemu_exit(r == 0 && rep.errors == 0 ? power::ExitCode::kSuccess : power::ExitCode::kFailure);
 }
@@ -85,10 +85,10 @@ void print_memory_map() {
   uint64_t usable = 0, reclaimable = 0;
   kprintf("memory map (%lu regions):\n", boot::region_count());
   for (uint64_t i = 0; i < boot::region_count(); i++) {
-    const shale::MemRegion& r = boot::regions()[i];
-    if (r.kind == shale::MemKind::kUsable) usable += r.pages;
-    if (r.kind == shale::MemKind::kLoaderReclaimable) reclaimable += r.pages;
-    kprintf("  %016lx-%016lx %8lu KiB %s\n", r.base, r.base + r.pages * shale::kPageSize, r.pages * 4,
+    const os::MemRegion& r = boot::regions()[i];
+    if (r.kind == os::MemKind::kUsable) usable += r.pages;
+    if (r.kind == os::MemKind::kLoaderReclaimable) reclaimable += r.pages;
+    kprintf("  %016lx-%016lx %8lu KiB %s\n", r.base, r.base + r.pages * os::kPageSize, r.pages * 4,
             boot::kind_name(r.kind));
   }
   kprintf("usable %lu MiB, loader-reclaimable %lu MiB\n", usable / 256, reclaimable / 256);
@@ -96,19 +96,19 @@ void print_memory_map() {
 
 }  // namespace
 
-extern "C" [[noreturn]] void kmain(const shale::BootInfo* loader_info) {
+extern "C" [[noreturn]] void kmain(const os::BootInfo* loader_info) {
   uint64_t tsc_kernel_entry = arch::rdtsc();
   serial::init();
   boot::init(loader_info);
   run_constructors();
 
-  const shale::BootInfo& bi = boot::info();
-  kprintf("\nShale kernel booting (loader->kernel %lu kcycles)\n",
+  const os::BootInfo& bi = boot::info();
+  kprintf("\nKernel booting (loader->kernel %lu kcycles)\n",
           (tsc_kernel_entry - bi.tsc_loader_entry) / 1000);
   kprintf("kernel: phys %lx virt %lx size %lu KiB\n", bi.kernel_phys, bi.kernel_virt, bi.kernel_pages * 4);
 
   char fw_cmdline[256];
-  if (fw_cfg::read_file("opt/shale/cmdline", fw_cmdline, sizeof(fw_cmdline)) >= 0)
+  if (fw_cfg::read_file("opt/os/cmdline", fw_cmdline, sizeof(fw_cmdline)) >= 0)
     cmdline::init(fw_cmdline);
   else
     cmdline::init(bi.cmdline);
@@ -158,18 +158,18 @@ void shutdown(ExitCode code) {
 #include "fmt/format.hpp"
 
 KTEST(boot_info_sane) {
-  const shale::BootInfo& bi = boot::info();
-  KEXPECT_EQ(bi.magic, shale::kBootInfoMagic);
-  KEXPECT_EQ(bi.hhdm_base, shale::kHhdmBase);
-  KEXPECT(bi.kernel_virt == shale::kKernelBase);
+  const os::BootInfo& bi = boot::info();
+  KEXPECT_EQ(bi.magic, os::kBootInfoMagic);
+  KEXPECT_EQ(bi.hhdm_base, os::kHhdmBase);
+  KEXPECT(bi.kernel_virt == os::kKernelBase);
   KEXPECT(bi.region_count > 0);
   KEXPECT(bi.direct_map_top >= (4ull << 30));
   KEXPECT(bi.rsdp_phys != 0);
   bool saw_kernel = false;
   for (uint64_t i = 0; i < boot::region_count(); i++) {
-    const shale::MemRegion& r = boot::regions()[i];
-    if (r.kind == shale::MemKind::kKernel && r.base <= bi.kernel_phys &&
-        r.base + r.pages * shale::kPageSize >= bi.kernel_phys + bi.kernel_pages * shale::kPageSize)
+    const os::MemRegion& r = boot::regions()[i];
+    if (r.kind == os::MemKind::kKernel && r.base <= bi.kernel_phys &&
+        r.base + r.pages * os::kPageSize >= bi.kernel_phys + bi.kernel_pages * os::kPageSize)
       saw_kernel = true;
   }
   KEXPECT(saw_kernel);
@@ -183,14 +183,14 @@ KTEST(boot_direct_map_reads_rsdp) {
 
 KTEST(fmt_basic) {
   char b[64];
-  shale::fmt::format(b, sizeof(b), "%d|%5u|%-4x|%08lx|%s|%c", -42, 7u, 0xabu, 0x1234ul, "ok", 'z');
+  os::fmt::format(b, sizeof(b), "%d|%5u|%-4x|%08lx|%s|%c", -42, 7u, 0xabu, 0x1234ul, "ok", 'z');
   KEXPECT(strcmp(b, "-42|    7|ab  |00001234|ok|z") == 0);
-  int n = shale::fmt::format(b, 4, "%s", "truncated");
+  int n = os::fmt::format(b, 4, "%s", "truncated");
   KEXPECT_EQ(n, 9);
   KEXPECT(strcmp(b, "tru") == 0);
-  shale::fmt::format(b, sizeof(b), "%p", reinterpret_cast<void*>(0x10));
+  os::fmt::format(b, sizeof(b), "%p", reinterpret_cast<void*>(0x10));
   KEXPECT(strcmp(b, "0x0000000000000010") == 0);
-  shale::fmt::format(b, sizeof(b), "%#lx|%#x|%#o", 0x20ul, 0u, 8u);
+  os::fmt::format(b, sizeof(b), "%#lx|%#x|%#o", 0x20ul, 0u, 8u);
   KEXPECT(strcmp(b, "0x20|0|010") == 0);
 }
 

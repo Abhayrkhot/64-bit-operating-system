@@ -1,10 +1,10 @@
 // ELF64 definitions shared by the UEFI loader, the kernel's program loader and
-// host tools. Only what Shale uses.
+// host tools. Only what this OS uses.
 #pragma once
 
 #include <stdint.h>
 
-namespace shale::elf {
+namespace os::elf {
 
 constexpr uint8_t kMag0 = 0x7f;
 constexpr uint8_t kClass64 = 2;
@@ -53,4 +53,4 @@ inline bool has_valid_ident(const Ehdr& h) {
          h.ident[4] == kClass64 && h.ident[5] == kData2Lsb;
 }
 
-}  // namespace shale::elf
+}  // namespace os::elf

@@ -1,4 +1,4 @@
-// ShaleFS benchmarks from user space, printed as BENCH lines.
+// File-system benchmarks from user space, printed as BENCH lines.
 //
 //   fsync_4k          write 4 KiB to a new file + fsync, per file (latency)
 //   group_commit      256 small appends then one fsync, vs fsync after each
@@ -7,7 +7,7 @@
 //
 // Under QEMU the virtio disk sits on the host's page cache and a flush is a
 // host fdatasync, so absolute numbers depend on the host's storage.
-#include "shale.hpp"
+#include "libc.hpp"
 #include "util/sort.hpp"
 
 namespace {
@@ -18,7 +18,7 @@ uint8_t g_buf[64 * 1024];
 uint64_t us(uint64_t ns) { return ns / 1000; }
 
 void report_ns(const char* bench, const char* metric, uint64_t* ns, uint64_t n) {
-  shale::heap_sort(ns, n);
+  os::heap_sort(ns, n);
   uint64_t sum = 0;
   for (uint64_t i = 0; i < n; i++) sum += ns[i];
   printf("BENCH %s %s n=%lu mean_us=%lu p50_us=%lu p99_us=%lu\n", bench, metric, n, us(sum / n), us(ns[n / 2]),

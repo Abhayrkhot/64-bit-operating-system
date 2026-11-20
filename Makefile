@@ -1,4 +1,4 @@
-# Shale build. Run inside the toolchain container: scripts/dev.sh 'make -j test'
+# Build. Run inside the toolchain container: scripts/dev.sh 'make -j test'
 #
 #   make            loader, kernel, user programs, ESP image, host tools
 #   make ktest      boot the kernel in QEMU and run the in-kernel tests
@@ -31,7 +31,7 @@ $(BUILD)/BOOTX64.EFI: $(BOOT_OBJS)
 # --- Kernel: freestanding ELF, higher half, no SSE --------------------------
 KERNEL_CXXFLAGS := --target=x86_64-unknown-none-elf -std=c++17 $(FREESTANDING) -mno-red-zone -mcmodel=kernel \
   -mno-mmx -mno-sse -mno-sse2 -mno-80387 -fno-pic -fno-pie -fno-omit-frame-pointer -O2 -g $(WARN) \
-  -Iinclude -Ikernel -Ilib -DSHALE_KERNEL=1
+  -Iinclude -Ikernel -Ilib -DOS_KERNEL=1
 KERNEL_ASFLAGS := --target=x86_64-unknown-none-elf -Iinclude -Ikernel -g
 # Portable libraries compiled into the kernel (also built for host tests).
 SHARED_LIB_DIRS := lib/fmt lib/mm lib/fs lib/util lib/elf
@@ -56,7 +56,7 @@ $(BUILD)/kernel.stripped: $(BUILD)/kernel.elf
 
 # --- User programs ----------------------------------------------------------
 USER_CXXFLAGS := --target=x86_64-unknown-none-elf -std=c++17 $(FREESTANDING) -fno-pic -fno-pie \
-  -fno-omit-frame-pointer -O2 -g $(WARN) -Iinclude -Iuser/libc -Ilib -DSHALE_USER=1
+  -fno-omit-frame-pointer -O2 -g $(WARN) -Iinclude -Iuser/libc -Ilib -DOS_USER=1
 USER_LIBC_SRCS := $(wildcard user/libc/*.cpp user/libc/*.S) lib/fmt/format.cpp lib/util/crc32c.cpp $(FREESTANDING_SRCS)
 USER_LIBC_OBJS := $(patsubst %,$(BUILD)/u/%.o,$(USER_LIBC_SRCS))
 USER_PROGS := $(notdir $(basename $(wildcard user/bin/*.cpp)))
@@ -83,14 +83,14 @@ $(BUILD)/initrd.tar: $(USER_ELFS) $(wildcard initrd/*)
 $(BUILD)/esp.img: $(BUILD)/BOOTX64.EFI $(BUILD)/kernel.stripped $(BUILD)/initrd.tar
 	rm -f $@
 	truncate -s 32M $@
-	mkfs.fat -F 16 -n SHALE $@ >/dev/null
+	mkfs.fat -F 16 -n ESP $@ >/dev/null
 	mmd -i $@ ::/EFI ::/EFI/BOOT
 	mcopy -i $@ $(BUILD)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i $@ $(BUILD)/kernel.stripped ::/kernel.elf
 	mcopy -i $@ $(BUILD)/initrd.tar ::/initrd.tar
 
 # --- Host tools and tests ---------------------------------------------------
-HOST_CXXFLAGS := -std=c++17 -O2 -g $(WARN) -Iinclude -Ilib -Ihost -DSHALE_HOSTED=1
+HOST_CXXFLAGS := -std=c++17 -O2 -g $(WARN) -Iinclude -Ilib -Ihost -DOS_HOSTED=1
 HOST_LIB_OBJS := $(patsubst %,$(BUILD)/h/%.o,$(SHARED_SRCS))
 HOST_TEST_SRCS := $(wildcard host/tests/*.cpp)
 HOST_TOOLS := $(patsubst host/tools/%.cpp,$(BUILD)/host/%,$(wildcard host/tools/*.cpp))
@@ -130,7 +130,7 @@ run: image
 # libFuzzer + ASan/UBSan over the ELF validator, seeded with the real programs.
 FUZZ_SECONDS ?= 60
 FUZZ_FLAGS := -std=c++17 -O1 -g -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined \
-  -Iinclude -Ilib -DSHALE_HOSTED=1
+  -Iinclude -Ilib -DOS_HOSTED=1
 $(BUILD)/fuzz/elf_fuzz: host/fuzz/elf_fuzz.cpp lib/elf/validate.cpp lib/elf/validate.hpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(FUZZ_FLAGS) -o $@ host/fuzz/elf_fuzz.cpp lib/elf/validate.cpp
