@@ -24,7 +24,7 @@ run_mode() {  # name, flags...
 }
 
 run_mode journal-torn --torn
-run_mode nojournal
+run_mode nojournal --nojournal
 run_mode trust-commits-torn --trust-commits --torn
 
 echo "== QEMU kill test ($TRIALS trials)"

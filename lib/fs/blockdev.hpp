@@ -19,6 +19,15 @@ class BlockDevice {
   virtual int read(uint32_t block, uint32_t count, void* buf) = 0;
   virtual int write(uint32_t block, uint32_t count, const void* buf) = 0;
   virtual int flush() = 0;
+  // Reads several (not necessarily contiguous) blocks; devices that can keep
+  // many requests in flight override this. bufs[i] receives blocks[i].
+  virtual int read_batch(const uint32_t* blocks, uint32_t n, uint8_t* const* bufs) {
+    for (uint32_t i = 0; i < n; i++) {
+      int r = read(blocks[i], 1, bufs[i]);
+      if (r < 0) return r;
+    }
+    return 0;
+  }
 };
 
 }  // namespace shale::fs

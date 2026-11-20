@@ -39,6 +39,8 @@ class BufferCache {
   // Pins and returns the buffer for `block`.
   int get(uint32_t block, Mode mode, Buffer** out);
   void put(Buffer* b);
+  // Loads the blocks that aren't cached yet with one device batch (read-ahead).
+  int prefetch(const uint32_t* blocks, uint32_t n);
   int write_in_place(Buffer* b);
   // Drops a freed block's cached contents (unless it's in the running txn).
   void forget(uint32_t block);

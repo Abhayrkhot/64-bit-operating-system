@@ -136,6 +136,8 @@ class ShaleFs {
   uint32_t free_blocks_ = 0;      // clear bits in the block bitmap (including deferred)
   uint32_t block_rover_ = 0, inode_rover_ = 1;
   uint8_t* scratch_ = nullptr;    // one block for journal descriptors/commits
+  uint32_t ra_ino_ = 0;           // sequential read detection for read-ahead
+  uint64_t ra_next_ = 0;
 };
 
 }  // namespace shale::fs

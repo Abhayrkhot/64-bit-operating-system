@@ -1131,7 +1131,27 @@ int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
   n = shale::min(n, ip->size - offset);
   auto* out = static_cast<uint8_t*>(buf);
   uint64_t done = 0;
+  uint64_t prefetched_to = offset / kBlockSize;  // file blocks below this are already requested
+  // A read that continues where the previous one on this inode stopped is
+  // treated as sequential: fetch ahead to the end of a 64-block window.
+  bool sequential = ino == ra_ino_ && offset == ra_next_;
+  uint64_t file_last = (ip->size - 1) / kBlockSize;
   while (done < n) {
+    // Read-ahead: map the next window of blocks and fetch the missing ones
+    // with one batch instead of one synchronous request per block.
+    uint64_t fb0 = (offset + done) / kBlockSize;
+    uint64_t last = sequential ? file_last : (offset + n - 1) / kBlockSize;
+    if (fb0 >= prefetched_to && last > fb0) {
+      constexpr uint32_t kWindow = 64;
+      uint32_t blocks[kWindow], count = 0;
+      for (uint64_t fb = fb0; fb <= last && count < kWindow; fb++) {
+        bool fresh;
+        if (bmap(ip, ib, fb, false, &blocks[count], &fresh) < 0) break;
+        count++;
+      }
+      cache_.prefetch(blocks, count);
+      prefetched_to = fb0 + count;
+    }
     uint64_t pos = offset + done, within = pos % kBlockSize;
     uint64_t len = shale::min<uint64_t>(kBlockSize - within, n - done);
     uint32_t block;
@@ -1148,6 +1168,8 @@ int64_t ShaleFs::read(uint32_t ino, uint64_t offset, void* buf, uint64_t n) {
     done += len;
   }
   cache_.put(ib);
+  ra_ino_ = ino;
+  ra_next_ = offset + done;
   return done ? static_cast<int64_t>(done) : r;
 }
 

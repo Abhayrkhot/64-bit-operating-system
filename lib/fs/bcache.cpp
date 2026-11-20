@@ -140,6 +140,47 @@ int BufferCache::get(uint32_t block, Mode mode, Buffer** out) {
 
 void BufferCache::put(Buffer* b) { b->refs--; }
 
+int BufferCache::prefetch(const uint32_t* blocks, uint32_t n) {
+  constexpr uint32_t kMax = 64;
+  Buffer* bufs[kMax];
+  uint32_t ids[kMax];
+  uint8_t* datas[kMax];
+  uint32_t m = 0;
+  int r = 0;
+  for (uint32_t i = 0; i < n && m < kMax; i++) {
+    if (!blocks[i] || find(blocks[i])) continue;
+    Buffer* b;
+    if ((r = victim(&b)) < 0) break;
+    b->block = blocks[i];
+    b->dirty = false;
+    b->txn = 0;
+    b->valid = false;
+    b->refs = 1;  // pinned while the batch is in flight
+    hash_insert(b);
+    bufs[m] = b;
+    ids[m] = blocks[i];
+    datas[m] = b->data;
+    m++;
+  }
+  if (m) {
+    stats_.reads += m;
+    stats_.misses += m;
+    int rr = dev_->read_batch(ids, m, datas);
+    for (uint32_t i = 0; i < m; i++) {
+      bufs[i]->refs = 0;
+      if (rr == 0) {
+        bufs[i]->valid = true;
+        touch(bufs[i]);
+      } else {
+        hash_remove(bufs[i]);
+        bufs[i]->block = 0xFFFFFFFFu;
+      }
+    }
+    if (rr < 0) r = rr;
+  }
+  return r;
+}
+
 void BufferCache::note_dirty_data(Buffer* b) {
   if (!b->dirty) {
     b->dirty = true;

@@ -49,6 +49,7 @@ struct Slot {
   alignas(16) ReqHeader hdr;
   volatile uint8_t status;
   bool busy;
+  bool async;  // fire-and-forget write: reclaimable once done
   volatile bool done;
   uint16_t head;
   uint8_t* bounce;  // one 4 KiB block, page aligned
@@ -65,10 +66,12 @@ class Disk final : public shale::fs::BlockDevice {
   int read(uint32_t block, uint32_t count, void* buf) override;
   int write(uint32_t block, uint32_t count, const void* buf) override;
   int flush() override;
+  int read_batch(const uint32_t* blocks, uint32_t n, uint8_t* const* bufs) override;
 
  private:
   int submit(Slot* s, uint32_t type, uint64_t sector, bool with_data, bool device_writes);
   void reap();
+  void kick();
   int wait(Slot* s);
   Slot* acquire();
   void release(Slot* s) { s->busy = false; }
@@ -85,6 +88,7 @@ class Disk final : public shale::fs::BlockDevice {
   unsigned nslots_ = 0;
   bool can_flush_ = false;
   bool write_error_ = false;
+  uint32_t pending_kick_ = 0;
   uint32_t blocks_ = 0;
   Mutex lock_;
 };
@@ -157,7 +161,10 @@ void Disk::reap() {
 
 int Disk::submit(Slot* s, uint32_t type, uint64_t sector, bool with_data, bool device_writes) {
   uint16_t need = with_data ? 3 : 2;
-  while (num_free_ < need) reap();
+  while (num_free_ < need) {
+    kick();
+    reap();
+  }
   s->hdr = {type, 0, sector};
   s->status = 0xFF;
   s->done = false;
@@ -181,20 +188,31 @@ int Disk::submit(Slot* s, uint32_t type, uint64_t sector, bool with_data, bool d
   barrier();
   avail_idx_++;
   avail_[1] = avail_idx_;
-  barrier();
-  arch::outw(io_ + kRegQueueNotify, 0);
+  pending_kick_++;
   return 0;
 }
 
+// Rings the doorbell for everything queued since the last kick. Each kick is
+// a VM exit under virtualization, so requests are batched behind one.
+void Disk::kick() {
+  if (!pending_kick_) return;
+  barrier();
+  arch::outw(io_ + kRegQueueNotify, 0);
+  pending_kick_ = 0;
+}
+
 int Disk::wait(Slot* s) {
+  kick();
   for (int spin = 0; !s->done; spin++) {
     reap();
     if (s->done) break;
-    if (spin < 4000 || !sched::current()) {
+    if (spin < 2000 || !sched::current()) {
       arch::pause();
+    } else if (spin < 200000) {
+      sched::yield();  // let runnable threads in; returns at once if there are none
     } else {
       g_stats.polls_slept++;
-      sched::sleep_ms(1);
+      sched::sleep_ms(1);  // a very slow device (host flush under load)
     }
   }
   return s->status == 0 ? 0 : -shale::sys::kEIO;
@@ -204,12 +222,14 @@ Slot* Disk::acquire() {
   for (;;) {
     for (unsigned i = 0; i < nslots_; i++) {
       Slot* s = &slots_[i];
-      if (s->busy && s->done) s->busy = false;  // completed write
+      if (s->busy && s->async && s->done) s->busy = false;  // completed write
       if (!s->busy) {
         s->busy = true;
+        s->async = false;
         return s;
       }
     }
+    kick();
     reap();
     arch::pause();
   }
@@ -231,14 +251,44 @@ int Disk::read(uint32_t block, uint32_t count, void* buf) {
   return r;
 }
 
+int Disk::read_batch(const uint32_t* blocks, uint32_t n, uint8_t* const* bufs) {
+  lock_.lock();
+  int r = 0;
+  for (uint32_t done = 0; done < n && r == 0;) {
+    // Keep up to all free slots in flight, then collect them in order.
+    Slot* batch[kMaxSlots];
+    uint32_t m = 0;
+    for (; done + m < n && m < nslots_; m++) {
+      if (blocks[done + m] >= blocks_) {
+        r = -shale::sys::kEIO;
+        break;
+      }
+      batch[m] = acquire();
+      submit(batch[m], kReqIn, static_cast<uint64_t>(blocks[done + m]) * 8, true, true);
+    }
+    for (uint32_t i = 0; i < m; i++) {
+      int rr = wait(batch[i]);
+      if (rr == 0) memcpy(bufs[done + i], batch[i]->bounce, kBlockSize);
+      if (rr < 0 && r == 0) r = rr;
+      release(batch[i]);
+      g_stats.reads++;
+    }
+    done += m;
+  }
+  lock_.unlock();
+  return r;
+}
+
 int Disk::write(uint32_t block, uint32_t count, const void* buf) {
   if (block + static_cast<uint64_t>(count) > blocks_) return -shale::sys::kEIO;
   lock_.lock();
   for (uint32_t i = 0; i < count; i++) {
     Slot* s = acquire();
     memcpy(s->bounce, static_cast<const uint8_t*>(buf) + static_cast<uint64_t>(i) * kBlockSize, kBlockSize);
+    s->async = true;
     submit(s, kReqOut, static_cast<uint64_t>(block + i) * 8, true, false);  // completes asynchronously
     g_stats.writes++;
+    if (pending_kick_ >= 16) kick();
   }
   lock_.unlock();
   return 0;

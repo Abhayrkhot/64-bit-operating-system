@@ -41,8 +41,9 @@ def build_command(args, vars_path):
         "-drive", f"if=ide,format=raw,media=disk,snapshot=on,file={args.esp}",
         "-serial", "stdio",
         "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
-        "-fw_cfg", "name=opt/shale/cmdline,string=" + args.cmdline.replace(",", ",,"),
     ]
+    if args.cmdline:  # QEMU rejects an empty fw_cfg string; no file means "default boot"
+        cmd += ["-fw_cfg", "name=opt/shale/cmdline,string=" + args.cmdline.replace(",", ",,")]
     for i, disk in enumerate(args.disk):
         cmd += ["-drive", f"if=none,id=data{i},format=raw,cache=writeback,file={disk}",
                 "-device", f"virtio-blk-pci,drive=data{i},disable-modern=on"]

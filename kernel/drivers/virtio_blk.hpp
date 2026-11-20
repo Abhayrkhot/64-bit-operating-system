@@ -6,8 +6,10 @@
 // every outstanding request and then issues VIRTIO_BLK_T_FLUSH, which is the
 // ordering point the file system builds on. Reads are synchronous.
 //
-// Completion is polled (briefly busy, then sleeping a tick) rather than
-// interrupt-driven, which keeps the driver independent of INTx routing.
+// Completion is polled (busy, then yielding to other threads, then sleeping
+// for very slow requests) rather than interrupt-driven, which keeps the
+// driver independent of INTx routing. Requests are queued behind a batched
+// doorbell: each notify is a VM exit.
 #pragma once
 
 #include "fs/blockdev.hpp"
