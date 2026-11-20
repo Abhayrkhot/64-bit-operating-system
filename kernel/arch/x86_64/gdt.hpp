@@ -8,7 +8,7 @@ namespace gdt {
 
 constexpr uint16_t kKernelCode = 0x08;
 constexpr uint16_t kKernelData = 0x10;
-constexpr uint16_t kUserBase = 0x18;  // 32-bit user code (unused), base for sysret
+constexpr uint16_t kUserBase = 0x18;  // 32-bit user code (unused), base for sysret (STAR uses 0x18 | 3)
 constexpr uint16_t kUserData = 0x20 | 3;
 constexpr uint16_t kUserCode = 0x28 | 3;
 constexpr uint16_t kTss = 0x30;

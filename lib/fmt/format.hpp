@@ -7,7 +7,7 @@
 
 namespace shale::fmt {
 
-// Supports flags "-0 +", width, precision (strings and integers), length
+// Supports flags "-0 +#", width, precision (strings and integers), length
 // modifiers hh h l ll z j t and conversions d i u x X o p s c %.
 // Returns the number of characters the full output needs (like vsnprintf).
 int vformat(char* buf, size_t size, const char* fmt, va_list ap);

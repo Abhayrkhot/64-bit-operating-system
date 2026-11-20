@@ -262,8 +262,13 @@ namespace syscall {
 
 void init() {
   arch::wrmsr(arch::kMsrEfer, arch::rdmsr(arch::kMsrEfer) | 1);  // SCE
-  arch::wrmsr(arch::kMsrStar,
-              (static_cast<uint64_t>(gdt::kUserBase) << 48) | (static_cast<uint64_t>(gdt::kKernelCode) << 32));
+  // SYSRET loads CS = STAR[63:48] + 16 and SS = STAR[63:48] + 8. Intel CPUs
+  // force RPL 3 on both; AMD CPUs take the RPL bits from STAR as written, so
+  // the base must carry RPL 3 itself (as Linux does with __USER32_CS).
+  // Without it, user code on AMD runs with CS/SS RPL 0, the next interrupt
+  // looks like it came from the kernel, and its iretq faults on SS.
+  arch::wrmsr(arch::kMsrStar, (static_cast<uint64_t>(gdt::kUserBase | 3) << 48) |
+                                  (static_cast<uint64_t>(gdt::kKernelCode) << 32));
   arch::wrmsr(arch::kMsrLstar, reinterpret_cast<uint64_t>(syscall_entry));
   arch::wrmsr(arch::kMsrFmask, 0x47700);  // IF, TF, DF, NT, AC
   usercopy::init();

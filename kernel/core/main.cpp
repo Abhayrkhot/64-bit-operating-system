@@ -190,6 +190,8 @@ KTEST(fmt_basic) {
   KEXPECT(strcmp(b, "tru") == 0);
   shale::fmt::format(b, sizeof(b), "%p", reinterpret_cast<void*>(0x10));
   KEXPECT(strcmp(b, "0x0000000000000010") == 0);
+  shale::fmt::format(b, sizeof(b), "%#lx|%#x|%#o", 0x20ul, 0u, 8u);
+  KEXPECT(strcmp(b, "0x20|0|010") == 0);
 }
 
 KTEST(cmdline_parse) {

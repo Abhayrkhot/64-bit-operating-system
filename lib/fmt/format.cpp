@@ -19,7 +19,7 @@ struct Out {
 };
 
 struct Spec {
-  bool left = false, zero = false, plus = false, space = false;
+  bool left = false, zero = false, plus = false, space = false, alt = false;
   int width = 0;
   int precision = -1;
 };
@@ -66,6 +66,7 @@ int vformat(char* buf, size_t size, const char* fmt, va_list ap) {
       else if (*p == '0') spec.zero = true;
       else if (*p == '+') spec.plus = true;
       else if (*p == ' ') spec.space = true;
+      else if (*p == '#') spec.alt = true;
       else break;
     }
     if (*p == '*') {
@@ -136,9 +137,21 @@ int vformat(char* buf, size_t size, const char* fmt, va_list ap) {
         break;
       }
       case 'u': emit_number(out, spec, get_unsigned(), false, 10, false, nullptr); break;
-      case 'x': emit_number(out, spec, get_unsigned(), false, 16, false, nullptr); break;
-      case 'X': emit_number(out, spec, get_unsigned(), false, 16, true, nullptr); break;
-      case 'o': emit_number(out, spec, get_unsigned(), false, 8, false, nullptr); break;
+      case 'x': {
+        uint64_t v = get_unsigned();
+        emit_number(out, spec, v, false, 16, false, spec.alt && v ? "0x" : nullptr);
+        break;
+      }
+      case 'X': {
+        uint64_t v = get_unsigned();
+        emit_number(out, spec, v, false, 16, true, spec.alt && v ? "0X" : nullptr);
+        break;
+      }
+      case 'o': {
+        uint64_t v = get_unsigned();
+        emit_number(out, spec, v, false, 8, false, spec.alt && v ? "0" : nullptr);
+        break;
+      }
       case 'p': {
         auto v = reinterpret_cast<uintptr_t>(va_arg(ap, void*));
         Spec ps = spec;
